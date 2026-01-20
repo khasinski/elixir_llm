@@ -203,28 +203,29 @@ defmodule ElixirLLM.Content do
 
   # Private helpers
 
-  defp media_type_from_path(path) do
-    ext = Path.extname(path) |> String.downcase()
+  @mime_types %{
+    ".jpg" => "image/jpeg",
+    ".jpeg" => "image/jpeg",
+    ".png" => "image/png",
+    ".gif" => "image/gif",
+    ".webp" => "image/webp",
+    ".bmp" => "image/bmp",
+    ".mp3" => "audio/mpeg",
+    ".wav" => "audio/wav",
+    ".ogg" => "audio/ogg",
+    ".m4a" => "audio/mp4",
+    ".flac" => "audio/flac",
+    ".webm" => "video/webm",
+    ".mp4" => "video/mp4",
+    ".avi" => "video/x-msvideo",
+    ".mov" => "video/quicktime",
+    ".mkv" => "video/x-matroska",
+    ".pdf" => "application/pdf"
+  }
 
-    case ext do
-      ".jpg" -> "image/jpeg"
-      ".jpeg" -> "image/jpeg"
-      ".png" -> "image/png"
-      ".gif" -> "image/gif"
-      ".webp" -> "image/webp"
-      ".bmp" -> "image/bmp"
-      ".mp3" -> "audio/mpeg"
-      ".wav" -> "audio/wav"
-      ".ogg" -> "audio/ogg"
-      ".m4a" -> "audio/mp4"
-      ".flac" -> "audio/flac"
-      ".webm" -> "video/webm"
-      ".mp4" -> "video/mp4"
-      ".avi" -> "video/x-msvideo"
-      ".mov" -> "video/quicktime"
-      ".pdf" -> "application/pdf"
-      _ -> "application/octet-stream"
-    end
+  defp media_type_from_path(path) do
+    ext = path |> Path.extname() |> String.downcase()
+    Map.get(@mime_types, ext, "application/octet-stream")
   end
 
   defp audio_format("audio/mpeg"), do: "mp3"

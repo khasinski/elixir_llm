@@ -28,19 +28,39 @@ defmodule ElixirLLM.Config do
         ]
   """
 
-  # OpenRouter prefix must be checked first (most specific)
+  # Provider prefixes for model auto-detection
+  # More specific prefixes must be checked first
   # OpenAI models: gpt-4o, gpt-4-turbo, gpt-4.5, o1, o3, chatgpt-4o
   # Anthropic models: claude-sonnet-4, claude-opus-4, claude-3.5-sonnet, claude-3-opus
+  # Gemini models: gemini-2.0-flash, gemini-1.5-pro, gemini-1.5-flash
+  # Groq models: groq/llama-3.3-70b-versatile
+  # Mistral models: mistral-api/mistral-large-latest
+  # Together models: together/meta-llama/Llama-3.3-70B-Instruct-Turbo
   @provider_prefixes [
+    # Prefixed providers (most specific, check first)
     {"openrouter/", ElixirLLM.Providers.OpenRouter},
+    {"groq/", ElixirLLM.Providers.Groq},
+    {"together/", ElixirLLM.Providers.Together},
+    {"mistral-api/", ElixirLLM.Providers.Mistral},
+    # OpenAI models
     {"gpt-", ElixirLLM.Providers.OpenAI},
     {"o1", ElixirLLM.Providers.OpenAI},
     {"o3", ElixirLLM.Providers.OpenAI},
     {"o4", ElixirLLM.Providers.OpenAI},
     {"chatgpt-", ElixirLLM.Providers.OpenAI},
+    # Anthropic models
     {"claude-", ElixirLLM.Providers.Anthropic},
+    # Gemini models (direct API)
+    {"gemini-", ElixirLLM.Providers.Gemini},
+    # Mistral models (direct API, without prefix)
+    {"mistral-large", ElixirLLM.Providers.Mistral},
+    {"mistral-medium", ElixirLLM.Providers.Mistral},
+    {"mistral-small", ElixirLLM.Providers.Mistral},
+    {"codestral", ElixirLLM.Providers.Mistral},
+    {"open-mistral", ElixirLLM.Providers.Mistral},
+    {"ministral", ElixirLLM.Providers.Mistral},
+    # Ollama models (local)
     {"llama", ElixirLLM.Providers.Ollama},
-    {"mistral", ElixirLLM.Providers.Ollama},
     {"codellama", ElixirLLM.Providers.Ollama},
     {"phi", ElixirLLM.Providers.Ollama},
     {"gemma", ElixirLLM.Providers.Ollama},

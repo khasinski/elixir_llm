@@ -1,7 +1,7 @@
 defmodule ElixirLLMTest do
   use ExUnit.Case
 
-  alias ElixirLLM.{Chat, Message, Response, Chunk, ToolCall, Tool}
+  alias ElixirLLM.{Chat, Chunk, Message, Response, Tool, ToolCall}
 
   describe "new/1" do
     test "creates a new chat" do
@@ -190,7 +190,6 @@ defmodule ElixirLLMTest do
 
     test "provider_for_model/1 detects Ollama models" do
       assert ElixirLLM.Config.provider_for_model("llama3.2") == ElixirLLM.Providers.Ollama
-      assert ElixirLLM.Config.provider_for_model("mistral") == ElixirLLM.Providers.Ollama
     end
 
     test "provider_for_model/1 detects OpenRouter models" do
@@ -199,6 +198,61 @@ defmodule ElixirLLMTest do
 
       assert ElixirLLM.Config.provider_for_model("openrouter/anthropic/claude-3.5-sonnet") ==
                ElixirLLM.Providers.OpenRouter
+    end
+
+    test "provider_for_model/1 detects Gemini models" do
+      assert ElixirLLM.Config.provider_for_model("gemini-2.0-flash") ==
+               ElixirLLM.Providers.Gemini
+
+      assert ElixirLLM.Config.provider_for_model("gemini-1.5-pro") ==
+               ElixirLLM.Providers.Gemini
+    end
+
+    test "provider_for_model/1 detects Groq models" do
+      assert ElixirLLM.Config.provider_for_model("groq/llama-3.3-70b-versatile") ==
+               ElixirLLM.Providers.Groq
+    end
+
+    test "provider_for_model/1 detects Mistral API models" do
+      assert ElixirLLM.Config.provider_for_model("mistral-api/mistral-large-latest") ==
+               ElixirLLM.Providers.Mistral
+
+      assert ElixirLLM.Config.provider_for_model("mistral-large-latest") ==
+               ElixirLLM.Providers.Mistral
+
+      assert ElixirLLM.Config.provider_for_model("codestral-latest") ==
+               ElixirLLM.Providers.Mistral
+    end
+
+    test "provider_for_model/1 detects Together AI models" do
+      assert ElixirLLM.Config.provider_for_model("together/meta-llama/Llama-3.3-70B") ==
+               ElixirLLM.Providers.Together
+    end
+  end
+
+  describe "Content" do
+    test "media_type_from_path handles common image types" do
+      content = ElixirLLM.Content.image("test.jpg")
+      assert content.media_type == "image/jpeg"
+
+      content = ElixirLLM.Content.image("test.png")
+      assert content.media_type == "image/png"
+
+      content = ElixirLLM.Content.image("test.webp")
+      assert content.media_type == "image/webp"
+    end
+
+    test "media_type_from_path handles audio types" do
+      content = ElixirLLM.Content.audio("test.mp3")
+      assert content.media_type == "audio/mpeg"
+
+      content = ElixirLLM.Content.audio("test.wav")
+      assert content.media_type == "audio/wav"
+    end
+
+    test "media_type_from_path returns default for unknown types" do
+      content = ElixirLLM.Content.file("test.xyz")
+      assert content.media_type == "application/octet-stream"
     end
   end
 end

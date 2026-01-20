@@ -74,7 +74,7 @@ defmodule ElixirLLM do
         ]
   """
 
-  alias ElixirLLM.{Chat, Message, Response, Tool, Telemetry}
+  alias ElixirLLM.{Chat, Message, Response, Telemetry, Tool}
 
   # Re-export Chat functions for pipe-friendly API
   defdelegate model(chat, model_id), to: Chat

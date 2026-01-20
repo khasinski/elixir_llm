@@ -8,13 +8,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Planned
-- Google Gemini provider
 - AWS Bedrock provider
-- OpenRouter provider
 - Parallel tool execution
 - Audio input/output support
 - Token counting utilities
 - Cost estimation
+
+---
+
+## [0.2.0] - 2026-01-20
+
+### Added
+
+#### New Providers
+- **Google Gemini** - `gemini-2.0-flash`, `gemini-1.5-pro`, `gemini-1.5-flash` support
+- **Mistral AI** - Direct API support for `mistral-large`, `codestral`, etc.
+- **Groq** - Ultra-fast LPU inference with `llama-3.3-70b-versatile`, `llama4-scout`
+- **Together AI** - 100+ open models via `together/` prefix
+
+#### Resilience Features
+- **Retry mechanism** - `ElixirLLM.Retry` with exponential backoff, configurable attempts, jitter
+- **Rate limiting** - `ElixirLLM.RateLimiter` with token bucket algorithm per provider
+- **Circuit breaker** - `ElixirLLM.CircuitBreaker` with closed/open/half-open states
+- **Response caching** - `ElixirLLM.Cache` with TTL and LRU eviction
+
+#### Error Handling
+- **Structured errors** - 9 custom exception types for different failure modes
+- **Error classification** - `retryable?/1` to identify transient vs permanent failures
+- **Error conversion** - `from_response/2` to parse provider errors into structured types
+- Error types: `APIError`, `RateLimitError`, `AuthenticationError`, `ValidationError`, `NetworkError`, `TimeoutError`, `ProviderError`, `ToolError`, `MaxDepthError`
+
+### Changed
+- **Provider detection** - Now supports 8 providers with automatic model-based routing
+- **Test coverage** - Expanded from 24 to 60 tests
+
+### Fixed
+- **Code complexity** - Replaced nested `case` in `media_type_from_path/1` with efficient Map lookup
+- **List operations** - Fixed inefficient `length(list) > 0` checks in all providers
+- **Enum operations** - Used `Enum.map_join/3` instead of `Enum.map |> Enum.join`
+- **Alias ordering** - All modules now have alphabetically sorted aliases
 
 ---
 
@@ -82,6 +114,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/khasinski/elixir_llm/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/khasinski/elixir_llm/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/khasinski/elixir_llm/releases/tag/v0.2.0
 [0.1.0]: https://github.com/khasinski/elixir_llm/releases/tag/v0.1.0
 [0.0.1]: https://github.com/khasinski/elixir_llm/releases/tag/v0.0.1

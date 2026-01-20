@@ -6,7 +6,7 @@ defmodule ElixirLLM.Provider do
   Optionally, they can implement embeddings and other features.
   """
 
-  alias ElixirLLM.{Chat, Response, Chunk}
+  alias ElixirLLM.{Chat, Chunk, Response}
 
   @doc """
   Sends a chat completion request and returns the response.

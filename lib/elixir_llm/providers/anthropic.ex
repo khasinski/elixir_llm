@@ -7,7 +7,7 @@ defmodule ElixirLLM.Providers.Anthropic do
 
   @behaviour ElixirLLM.Provider
 
-  alias ElixirLLM.{Chat, Response, Chunk, ToolCall, Config, Telemetry}
+  alias ElixirLLM.{Chat, Chunk, Config, Response, Telemetry, ToolCall}
 
   @default_base_url "https://api.anthropic.com"
   @api_version "2023-06-01"
@@ -108,10 +108,7 @@ defmodule ElixirLLM.Providers.Anthropic do
     {system_messages, other_messages} =
       Enum.split_with(chat.messages, &(&1.role == :system))
 
-    system_content =
-      system_messages
-      |> Enum.map(& &1.content)
-      |> Enum.join("\n\n")
+    system_content = Enum.map_join(system_messages, "\n\n", & &1.content)
 
     body = %{
       model: chat.model || "claude-sonnet-4-20250514",
@@ -153,7 +150,7 @@ defmodule ElixirLLM.Providers.Anthropic do
       end
 
     content_blocks =
-      if tool_calls && length(tool_calls) > 0 do
+      if tool_calls != nil and tool_calls != [] do
         tool_use_blocks =
           Enum.map(tool_calls, fn tc ->
             %{

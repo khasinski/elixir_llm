@@ -1,46 +1,44 @@
-defmodule ElixirLLM.Providers.OpenRouter do
+defmodule ElixirLLM.Providers.Mistral do
   @moduledoc """
-  OpenRouter API provider implementation.
+  Mistral AI API provider implementation.
 
-  OpenRouter provides access to multiple LLM providers through a single API.
-  It supports models from OpenAI, Anthropic, Google, Meta, Mistral, and more.
+  Supports Mistral models (mistral-large, mistral-medium, codestral, etc.).
 
   ## Configuration
 
       config :elixir_llm,
-        openrouter: [
-          api_key: System.get_env("OPENROUTER_API_KEY")
+        mistral: [
+          api_key: System.get_env("MISTRAL_API_KEY")
         ]
 
   ## Model Names
 
-  Use the full OpenRouter model identifier:
+  Use Mistral model identifiers with the `mistral-api/` prefix:
 
       ElixirLLM.new()
-      |> ElixirLLM.model("openrouter/openai/gpt-4o")
+      |> ElixirLLM.model("mistral-api/mistral-large-latest")
       |> ElixirLLM.ask("Hello!")
 
-  Or set the provider explicitly:
-
-      ElixirLLM.new()
-      |> ElixirLLM.provider(ElixirLLM.Providers.OpenRouter)
-      |> ElixirLLM.model("openai/gpt-4o")
-      |> ElixirLLM.ask("Hello!")
-
-  See https://openrouter.ai/models for available models.
+  Available models:
+    * `mistral-large-latest` - Most capable model
+    * `mistral-medium-latest` - Balanced performance
+    * `mistral-small-latest` - Fast and efficient
+    * `codestral-latest` - Code generation specialist
+    * `open-mistral-nemo` - Open-weight model
+    * `ministral-8b-latest` - Compact model
+    * `ministral-3b-latest` - Smallest model
   """
 
   @behaviour ElixirLLM.Provider
 
   alias ElixirLLM.{Chat, Chunk, Config, Response, Telemetry, ToolCall}
 
-  @base_url "https://openrouter.ai/api/v1"
+  @default_base_url "https://api.mistral.ai/v1"
 
   @impl true
   def chat(%Chat{} = chat) do
-    start_time = System.monotonic_time()
     model = normalize_model(chat.model)
-    metadata = %{provider: :openrouter, model: model}
+    metadata = %{provider: :mistral, model: model}
 
     Telemetry.span(:chat, metadata, fn ->
       body = build_request_body(chat, stream: false)
@@ -48,14 +46,7 @@ defmodule ElixirLLM.Providers.OpenRouter do
       case make_request("/chat/completions", body, chat) do
         {:ok, %{status: 200, body: response_body}} ->
           response = parse_response(response_body)
-          duration = System.monotonic_time() - start_time
-
-          Telemetry.emit(
-            :chat_complete,
-            %{duration: duration, tokens: response.total_tokens},
-            metadata
-          )
-
+          Telemetry.emit(:chat_complete, %{tokens: response.total_tokens}, metadata)
           {:ok, response}
 
         {:ok, %{status: status, body: body}} ->
@@ -73,7 +64,7 @@ defmodule ElixirLLM.Providers.OpenRouter do
   @impl true
   def stream(%Chat{} = chat, callback) when is_function(callback, 1) do
     model = normalize_model(chat.model)
-    metadata = %{provider: :openrouter, model: model}
+    metadata = %{provider: :mistral, model: model}
     body = build_request_body(chat, stream: true)
 
     Telemetry.span(:stream, metadata, fn ->
@@ -133,12 +124,12 @@ defmodule ElixirLLM.Providers.OpenRouter do
 
   # Private functions
 
-  # Strip "openrouter/" prefix if present
-  defp normalize_model("openrouter/" <> model), do: model
+  # Strip "mistral-api/" prefix if present
+  defp normalize_model("mistral-api/" <> model), do: model
   defp normalize_model(model), do: model
 
   defp build_request_body(%Chat{} = chat, opts) do
-    model = normalize_model(chat.model || Config.default_model())
+    model = normalize_model(chat.model || "mistral-large-latest")
 
     body = %{
       model: model,
@@ -153,12 +144,7 @@ defmodule ElixirLLM.Providers.OpenRouter do
       |> maybe_add_tools(chat.tools)
       |> Map.merge(chat.params)
 
-    # Add stream options for token usage in streaming
-    if Keyword.get(opts, :stream, false) do
-      Map.put(body, :stream_options, %{include_usage: true})
-    else
-      body
-    end
+    body
   end
 
   defp format_messages(messages) do
@@ -213,7 +199,7 @@ defmodule ElixirLLM.Providers.OpenRouter do
     }
   end
 
-  defp format_tool(%{name: name, description: desc, parameters: params, execute: _}) do
+  defp format_tool(%{name: name, description: desc, parameters: params}) do
     %{
       type: "function",
       function: %{
@@ -281,11 +267,11 @@ defmodule ElixirLLM.Providers.OpenRouter do
   defp parse_finish_reason("stop"), do: :stop
   defp parse_finish_reason("length"), do: :length
   defp parse_finish_reason("tool_calls"), do: :tool_calls
-  defp parse_finish_reason("content_filter"), do: :content_filter
+  defp parse_finish_reason("model_length"), do: :length
   defp parse_finish_reason(other), do: String.to_atom(other)
 
   defp parse_error(status, body) when is_map(body) do
-    message = get_in(body, ["error", "message"]) || "Unknown error"
+    message = get_in(body, ["message"]) || get_in(body, ["error", "message"]) || "Unknown error"
     %{status: status, message: message, body: body}
   end
 
@@ -294,10 +280,11 @@ defmodule ElixirLLM.Providers.OpenRouter do
   end
 
   defp make_request(path, body, _chat) do
-    api_key = Config.api_key(:openrouter)
+    base_url = Config.base_url(:mistral) || @default_base_url
+    api_key = Config.api_key(:mistral)
 
     Req.post(
-      @base_url <> path,
+      base_url <> path,
       json: body,
       headers: build_headers(api_key),
       receive_timeout: 120_000
@@ -305,65 +292,58 @@ defmodule ElixirLLM.Providers.OpenRouter do
   end
 
   defp make_stream_request(path, body, _chat, callback) do
-    api_key = Config.api_key(:openrouter)
+    base_url = Config.base_url(:mistral) || @default_base_url
+    api_key = Config.api_key(:mistral)
 
-    # Use process dictionary to accumulate chunks during streaming
-    Process.put(:stream_acc, %{
+    accumulated = %{
       content: "",
       tool_calls: [],
       model: nil,
       input_tokens: nil,
       output_tokens: nil,
       finish_reason: nil
-    })
+    }
 
-    into_fun = fn {:data, data}, {req, resp} ->
+    into_fun = fn {:data, data}, {req, resp, acc} ->
       chunks = parse_sse_data(data)
 
-      Enum.each(chunks, fn chunk_data ->
-        case parse_chunk(chunk_data) do
-          nil ->
-            :ok
+      new_acc =
+        Enum.reduce(chunks, acc, fn chunk_data, current_acc ->
+          case parse_chunk(chunk_data) do
+            nil ->
+              current_acc
 
-          chunk ->
-            callback.(chunk)
-            acc = Process.get(:stream_acc)
-            Process.put(:stream_acc, accumulate_chunk(acc, chunk))
-        end
-      end)
+            chunk ->
+              callback.(chunk)
+              accumulate_chunk(current_acc, chunk)
+          end
+        end)
 
-      {:cont, {req, resp}}
+      {:cont, {req, resp, new_acc}}
     end
 
-    result =
-      case Req.post(
-             @base_url <> path,
-             json: body,
-             headers: build_headers(api_key),
-             receive_timeout: 120_000,
-             into: into_fun
-           ) do
-        {:ok, %{status: 200}} ->
-          final_acc = Process.get(:stream_acc)
-          {:ok, build_final_response(final_acc)}
+    case Req.post(
+           base_url <> path,
+           json: body,
+           headers: build_headers(api_key),
+           receive_timeout: 120_000,
+           into: {:fold, accumulated, into_fun}
+         ) do
+      {:ok, %{status: 200, body: {_req, _resp, final_acc}}} ->
+        {:ok, build_final_response(final_acc)}
 
-        {:ok, %{status: status, body: body}} ->
-          {:error, parse_error(status, body)}
+      {:ok, %{status: status, body: body}} ->
+        {:error, parse_error(status, body)}
 
-        {:error, reason} ->
-          {:error, reason}
-      end
-
-    Process.delete(:stream_acc)
-    result
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
 
   defp build_headers(api_key) do
     [
       {"authorization", "Bearer #{api_key}"},
-      {"content-type", "application/json"},
-      {"http-referer", "https://github.com/khasinski/elixir_llm"},
-      {"x-title", "ElixirLLM"}
+      {"content-type", "application/json"}
     ]
   end
 

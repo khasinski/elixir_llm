@@ -8,7 +8,7 @@ defmodule ElixirLLM.Providers.Ollama do
 
   @behaviour ElixirLLM.Provider
 
-  alias ElixirLLM.{Chat, Response, Chunk, ToolCall, Config, Telemetry}
+  alias ElixirLLM.{Chat, Chunk, Config, Response, Telemetry, ToolCall}
 
   @default_base_url "http://localhost:11434"
 
@@ -132,7 +132,7 @@ defmodule ElixirLLM.Providers.Ollama do
   defp format_message(%{role: :assistant, content: content, tool_calls: tool_calls}) do
     msg = %{role: "assistant", content: content || ""}
 
-    if tool_calls && length(tool_calls) > 0 do
+    if tool_calls != nil and tool_calls != [] do
       Map.put(msg, :tool_calls, Enum.map(tool_calls, &format_tool_call_for_message/1))
     else
       msg
