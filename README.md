@@ -346,6 +346,10 @@ config :elixir_llm,
     api_key: System.get_env("ANTHROPIC_API_KEY")
   ],
 
+  openrouter: [
+    api_key: System.get_env("OPENROUTER_API_KEY")
+  ],
+
   ollama: [
     base_url: "http://localhost:11434"
   ]
@@ -365,14 +369,16 @@ ElixirLLM auto-detects the provider from the model name:
 
 | Provider | Example Models | Features |
 |----------|----------------|----------|
-| **OpenAI** | `gpt-4o`, `gpt-4-turbo`, `o1`, `o3-mini` | Chat, Vision, Tools, Streaming, Embeddings |
+| **OpenAI** | `gpt-4o`, `gpt-4.5-preview`, `o1`, `o3-mini` | Chat, Vision, Tools, Streaming, Embeddings |
 | **Anthropic** | `claude-sonnet-4-20250514`, `claude-opus-4-20250514` | Chat, Vision, PDFs, Tools, Streaming |
+| **OpenRouter** | `openrouter/openai/gpt-4o`, `openrouter/anthropic/claude-3.5-sonnet` | Access 100+ models via single API |
 | **Ollama** | `llama3.2`, `mistral`, `codellama` | Chat, Tools, Streaming, 100% Local |
 
 ```elixir
 # Provider is auto-detected from model name
 ElixirLLM.new() |> ElixirLLM.model("gpt-4o")                   # => OpenAI
 ElixirLLM.new() |> ElixirLLM.model("claude-sonnet-4-20250514") # => Anthropic
+ElixirLLM.new() |> ElixirLLM.model("openrouter/meta-llama/llama-3-70b") # => OpenRouter
 ElixirLLM.new() |> ElixirLLM.model("llama3.2")                 # => Ollama
 ```
 
@@ -460,7 +466,6 @@ mix docs
 
 - [ ] Google Gemini provider
 - [ ] AWS Bedrock provider
-- [ ] OpenRouter provider
 - [ ] Function calling with multiple parallel tools
 - [ ] Vision streaming
 - [ ] Audio input/output (Whisper, TTS)

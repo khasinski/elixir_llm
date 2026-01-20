@@ -192,5 +192,13 @@ defmodule ElixirLLMTest do
       assert ElixirLLM.Config.provider_for_model("llama3.2") == ElixirLLM.Providers.Ollama
       assert ElixirLLM.Config.provider_for_model("mistral") == ElixirLLM.Providers.Ollama
     end
+
+    test "provider_for_model/1 detects OpenRouter models" do
+      assert ElixirLLM.Config.provider_for_model("openrouter/openai/gpt-4o") ==
+               ElixirLLM.Providers.OpenRouter
+
+      assert ElixirLLM.Config.provider_for_model("openrouter/anthropic/claude-3.5-sonnet") ==
+               ElixirLLM.Providers.OpenRouter
+    end
   end
 end

@@ -19,25 +19,34 @@ defmodule ElixirLLM.Config do
           base_url: "https://api.anthropic.com"
         ],
 
+        openrouter: [
+          api_key: System.get_env("OPENROUTER_API_KEY")
+        ],
+
         ollama: [
           base_url: "http://localhost:11434"
         ]
   """
 
-  @provider_prefixes %{
-    "gpt-" => ElixirLLM.Providers.OpenAI,
-    "o1-" => ElixirLLM.Providers.OpenAI,
-    "o3-" => ElixirLLM.Providers.OpenAI,
-    "chatgpt-" => ElixirLLM.Providers.OpenAI,
-    "claude-" => ElixirLLM.Providers.Anthropic,
-    "llama" => ElixirLLM.Providers.Ollama,
-    "mistral" => ElixirLLM.Providers.Ollama,
-    "codellama" => ElixirLLM.Providers.Ollama,
-    "phi" => ElixirLLM.Providers.Ollama,
-    "gemma" => ElixirLLM.Providers.Ollama,
-    "qwen" => ElixirLLM.Providers.Ollama,
-    "deepseek" => ElixirLLM.Providers.Ollama
-  }
+  # OpenRouter prefix must be checked first (most specific)
+  # OpenAI models: gpt-4o, gpt-4-turbo, gpt-4.5, o1, o3, chatgpt-4o
+  # Anthropic models: claude-sonnet-4, claude-opus-4, claude-3.5-sonnet, claude-3-opus
+  @provider_prefixes [
+    {"openrouter/", ElixirLLM.Providers.OpenRouter},
+    {"gpt-", ElixirLLM.Providers.OpenAI},
+    {"o1", ElixirLLM.Providers.OpenAI},
+    {"o3", ElixirLLM.Providers.OpenAI},
+    {"o4", ElixirLLM.Providers.OpenAI},
+    {"chatgpt-", ElixirLLM.Providers.OpenAI},
+    {"claude-", ElixirLLM.Providers.Anthropic},
+    {"llama", ElixirLLM.Providers.Ollama},
+    {"mistral", ElixirLLM.Providers.Ollama},
+    {"codellama", ElixirLLM.Providers.Ollama},
+    {"phi", ElixirLLM.Providers.Ollama},
+    {"gemma", ElixirLLM.Providers.Ollama},
+    {"qwen", ElixirLLM.Providers.Ollama},
+    {"deepseek", ElixirLLM.Providers.Ollama}
+  ]
 
   @doc """
   Returns the default model.
@@ -82,9 +91,9 @@ defmodule ElixirLLM.Config do
   def provider_for_model(model_id) do
     model_lower = String.downcase(model_id)
 
-    Enum.find_value(@provider_prefixes, ElixirLLM.Providers.OpenAI, fn {prefix, provider} ->
+    Enum.find_value(@provider_prefixes, fn {prefix, provider} ->
       if String.starts_with?(model_lower, prefix), do: provider
-    end)
+    end) || ElixirLLM.Providers.OpenAI
   end
 
   @doc """
