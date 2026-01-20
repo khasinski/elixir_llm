@@ -190,7 +190,10 @@ defmodule ElixirLLM.RateLimiter do
   defp get_rate(provider) do
     config = Application.get_env(:elixir_llm, :rate_limiter, [])
     provider_config = Keyword.get(config, provider, [])
-    rpm = Keyword.get(provider_config, :requests_per_minute, Map.get(@default_rates, provider, 60))
+
+    rpm =
+      Keyword.get(provider_config, :requests_per_minute, Map.get(@default_rates, provider, 60))
+
     # Convert to tokens per second (we refill every second)
     max(div(rpm, 60), 1)
   end

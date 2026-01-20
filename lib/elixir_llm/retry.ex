@@ -102,7 +102,10 @@ defmodule ElixirLLM.Retry do
   def should_retry?(%Error.NetworkError{}), do: true
   def should_retry?(%Error.TimeoutError{}), do: true
   def should_retry?(%Error.ProviderError{}), do: true
-  def should_retry?(%Error.APIError{status: status}) when is_integer(status) and status in 500..599, do: true
+
+  def should_retry?(%Error.APIError{status: status})
+      when is_integer(status) and status in 500..599, do: true
+
   def should_retry?(%Error.APIError{status: 429}), do: true
 
   # For legacy error maps (before structured errors are used everywhere)
@@ -141,11 +144,23 @@ defmodule ElixirLLM.Retry do
 
     %{
       max_attempts:
-        Keyword.get(opts, :max_attempts, Keyword.get(app_config, :max_attempts, @default_max_attempts)),
+        Keyword.get(
+          opts,
+          :max_attempts,
+          Keyword.get(app_config, :max_attempts, @default_max_attempts)
+        ),
       base_delay_ms:
-        Keyword.get(opts, :base_delay_ms, Keyword.get(app_config, :base_delay_ms, @default_base_delay_ms)),
+        Keyword.get(
+          opts,
+          :base_delay_ms,
+          Keyword.get(app_config, :base_delay_ms, @default_base_delay_ms)
+        ),
       max_delay_ms:
-        Keyword.get(opts, :max_delay_ms, Keyword.get(app_config, :max_delay_ms, @default_max_delay_ms)),
+        Keyword.get(
+          opts,
+          :max_delay_ms,
+          Keyword.get(app_config, :max_delay_ms, @default_max_delay_ms)
+        ),
       jitter: Keyword.get(opts, :jitter, Keyword.get(app_config, :jitter, @default_jitter)),
       on_retry: Keyword.get(opts, :on_retry)
     }

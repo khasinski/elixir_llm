@@ -183,12 +183,10 @@ defmodule ElixirLLM.CircuitBreaker do
     config = Application.get_env(:elixir_llm, :circuit_breaker, [])
 
     %{
-      failure_threshold:
-        Keyword.get(config, :failure_threshold, @default_failure_threshold),
+      failure_threshold: Keyword.get(config, :failure_threshold, @default_failure_threshold),
       recovery_timeout_ms:
         Keyword.get(config, :recovery_timeout_ms, @default_recovery_timeout_ms),
-      half_open_max_calls:
-        Keyword.get(config, :half_open_max_calls, @default_half_open_max_calls)
+      half_open_max_calls: Keyword.get(config, :half_open_max_calls, @default_half_open_max_calls)
     }
   end
 

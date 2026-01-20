@@ -11,7 +11,12 @@ defmodule ElixirLLM.ErrorTest do
     end
 
     test "returns true for network errors" do
-      error = %Error.NetworkError{message: "Connection failed", provider: :openai, reason: :econnrefused}
+      error = %Error.NetworkError{
+        message: "Connection failed",
+        provider: :openai,
+        reason: :econnrefused
+      }
+
       assert Helpers.retryable?(error)
     end
 
@@ -26,7 +31,13 @@ defmodule ElixirLLM.ErrorTest do
     end
 
     test "returns true for 429 API errors" do
-      error = %Error.APIError{message: "Too many requests", provider: :openai, status: 429, body: %{}}
+      error = %Error.APIError{
+        message: "Too many requests",
+        provider: :openai,
+        status: 429,
+        body: %{}
+      }
+
       assert Helpers.retryable?(error)
     end
 
@@ -80,6 +91,7 @@ defmodule ElixirLLM.ErrorTest do
         message: "Rate limited",
         body: %{"error" => %{"retry_after" => 30}}
       }
+
       error = Helpers.from_response(response, :openai)
       assert error.retry_after == 30
     end
@@ -100,7 +112,13 @@ defmodule ElixirLLM.ErrorTest do
     end
 
     test "ToolError message includes tool name" do
-      error = %Error.ToolError{message: "Failed", tool_name: "calculator", arguments: %{}, reason: :bad}
+      error = %Error.ToolError{
+        message: "Failed",
+        tool_name: "calculator",
+        arguments: %{},
+        reason: :bad
+      }
+
       msg = Exception.message(error)
       assert msg =~ "[Tool:calculator]"
     end
