@@ -19,25 +19,23 @@ Inspired by the wonderful [RubyLLM](https://rubyllm.com).
 
 ## Demo
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│ iex> ElixirLLM.new()                                            │
-│ ...> |> ElixirLLM.model("gpt-4o")                               │
-│ ...> |> ElixirLLM.tool(MyApp.Tools.Weather)                     │
-│ ...> |> ElixirLLM.ask("What's the weather in Tokyo?")           │
-│                                                                 │
-│ # Tool called: get_weather(%{city: "Tokyo"})                    │
-│ # Tool result: %{temperature: 18, conditions: "partly cloudy"}  │
-│                                                                 │
-│ {:ok,                                                           │
-│  %ElixirLLM.Response{                                           │
-│    content: "It's currently 18°C and partly cloudy in Tokyo.",  │
-│    model: "gpt-4o",                                             │
-│    input_tokens: 52,                                            │
-│    output_tokens: 14                                            │
-│  },                                                             │
-│  %ElixirLLM.Chat{...}}                                          │
-└─────────────────────────────────────────────────────────────────┘
+```elixir
+iex> ElixirLLM.new()
+...> |> ElixirLLM.model("gpt-4o")
+...> |> ElixirLLM.tool(MyApp.Tools.Weather)
+...> |> ElixirLLM.ask("What's the weather in Tokyo?")
+
+# Tool called: get_weather(%{city: "Tokyo"})
+# Tool result: %{temperature: 18, conditions: "partly cloudy"}
+
+{:ok,
+ %ElixirLLM.Response{
+   content: "It's currently 18°C and partly cloudy in Tokyo.",
+   model: "gpt-4o",
+   input_tokens: 52,
+   output_tokens: 14
+ },
+ %ElixirLLM.Chat{...}}
 ```
 
 ---
