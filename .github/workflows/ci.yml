@@ -9,6 +9,9 @@ on:
 env:
   MIX_ENV: test
 
+permissions:
+  contents: read
+
 jobs:
   test:
     name: Test (Elixir ${{ matrix.elixir }} / OTP ${{ matrix.otp }})
@@ -63,6 +66,8 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    env:
+      MIX_ENV: dev
 
     steps:
       - name: Checkout
@@ -94,6 +99,8 @@ jobs:
   docs:
     name: Documentation
     runs-on: ubuntu-latest
+    env:
+      MIX_ENV: dev
 
     steps:
       - name: Checkout
