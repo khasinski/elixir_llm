@@ -59,7 +59,7 @@ Add to your `mix.exs`:
 ```elixir
 def deps do
   [
-    {:elixir_llm, "~> 0.1.0"}
+    {:elixir_llm, "~> 0.2.0"}
   ]
 end
 ```
@@ -346,6 +346,22 @@ config :elixir_llm,
     api_key: System.get_env("ANTHROPIC_API_KEY")
   ],
 
+  gemini: [
+    api_key: System.get_env("GOOGLE_API_KEY")
+  ],
+
+  mistral: [
+    api_key: System.get_env("MISTRAL_API_KEY")
+  ],
+
+  groq: [
+    api_key: System.get_env("GROQ_API_KEY")
+  ],
+
+  together: [
+    api_key: System.get_env("TOGETHER_API_KEY")
+  ],
+
   openrouter: [
     api_key: System.get_env("OPENROUTER_API_KEY")
   ],
@@ -371,6 +387,10 @@ ElixirLLM auto-detects the provider from the model name:
 |----------|----------------|----------|
 | **OpenAI** | `gpt-4o`, `gpt-4.5-preview`, `o1`, `o3-mini` | Chat, Vision, Tools, Streaming, Embeddings |
 | **Anthropic** | `claude-sonnet-4-20250514`, `claude-opus-4-20250514` | Chat, Vision, PDFs, Tools, Streaming |
+| **Google Gemini** | `gemini-2.0-flash`, `gemini-1.5-pro` | Chat, Vision, Tools, Streaming |
+| **Mistral AI** | `mistral-large-latest`, `codestral-latest` | Chat, Tools, Streaming |
+| **Groq** | `groq/llama-3.3-70b-versatile`, `groq/llama4-scout` | Ultra-fast LPU inference |
+| **Together AI** | `together/meta-llama/Llama-3.3-70B` | 100+ open models |
 | **OpenRouter** | `openrouter/openai/gpt-4o`, `openrouter/anthropic/claude-3.5-sonnet` | Access 100+ models via single API |
 | **Ollama** | `llama3.2`, `mistral`, `codellama` | Chat, Tools, Streaming, 100% Local |
 
@@ -378,7 +398,10 @@ ElixirLLM auto-detects the provider from the model name:
 # Provider is auto-detected from model name
 ElixirLLM.new() |> ElixirLLM.model("gpt-4o")                   # => OpenAI
 ElixirLLM.new() |> ElixirLLM.model("claude-sonnet-4-20250514") # => Anthropic
-ElixirLLM.new() |> ElixirLLM.model("openrouter/meta-llama/llama-3-70b") # => OpenRouter
+ElixirLLM.new() |> ElixirLLM.model("gemini-2.0-flash")         # => Gemini
+ElixirLLM.new() |> ElixirLLM.model("mistral-large-latest")     # => Mistral
+ElixirLLM.new() |> ElixirLLM.model("groq/llama-3.3-70b-versatile") # => Groq
+ElixirLLM.new() |> ElixirLLM.model("together/meta-llama/Llama-3.3-70B") # => Together
 ElixirLLM.new() |> ElixirLLM.model("llama3.2")                 # => Ollama
 ```
 
@@ -404,6 +427,150 @@ end, nil)
 | `[:elixir_llm, :tool, :call]` | Tool is being called |
 | `[:elixir_llm, :tool, :result]` | Tool returned a result |
 | `[:elixir_llm, :embed, :start \| :stop]` | Embedding request lifecycle |
+
+---
+
+## Resilience Features
+
+ElixirLLM includes built-in resilience patterns for production use.
+
+### Retry with Exponential Backoff
+
+Automatically retry failed requests with configurable backoff:
+
+```elixir
+alias ElixirLLM.Retry
+
+# Wrap any operation with retry logic
+Retry.with_retry(fn ->
+  ElixirLLM.chat("Hello!")
+end, max_attempts: 3, base_delay_ms: 1000)
+
+# Options:
+#   max_attempts: 3      - Maximum retry attempts
+#   base_delay_ms: 1000  - Initial delay between retries
+#   max_delay_ms: 30000  - Maximum delay cap
+#   jitter: true         - Add randomness to prevent thundering herd
+```
+
+### Rate Limiting
+
+Token bucket rate limiter to stay within provider limits:
+
+```elixir
+alias ElixirLLM.RateLimiter
+
+# Check if request is allowed
+case RateLimiter.check_rate(:openai) do
+  :ok -> ElixirLLM.chat("Hello!")
+  {:error, :rate_limited} -> # Handle rate limit
+end
+
+# Configure per-provider limits
+RateLimiter.configure(:openai, tokens_per_second: 10, bucket_size: 100)
+```
+
+### Circuit Breaker
+
+Prevent cascading failures when a provider is down:
+
+```elixir
+alias ElixirLLM.CircuitBreaker
+
+# Execute with circuit breaker protection
+case CircuitBreaker.call(:openai, fn -> ElixirLLM.chat("Hello!") end) do
+  {:ok, response} -> response
+  {:error, :circuit_open} -> # Provider is unhealthy, use fallback
+  {:error, reason} -> # Handle other errors
+end
+
+# Configure thresholds
+CircuitBreaker.configure(:openai,
+  failure_threshold: 5,      # Failures before opening circuit
+  recovery_timeout_ms: 30000 # Time before attempting recovery
+)
+```
+
+### Response Caching
+
+Cache responses to reduce API calls and latency:
+
+```elixir
+alias ElixirLLM.Cache
+
+# Cache a response
+Cache.put("cache_key", response, ttl_ms: 300_000)
+
+# Retrieve from cache
+case Cache.get("cache_key") do
+  {:ok, cached_response} -> cached_response
+  :miss -> # Fetch fresh response
+end
+
+# Configure cache size
+Cache.configure(max_size: 1000)  # LRU eviction when exceeded
+```
+
+---
+
+## Error Handling
+
+ElixirLLM provides structured error types for precise error handling:
+
+```elixir
+case ElixirLLM.chat("Hello!") do
+  {:ok, response} ->
+    response.content
+
+  {:error, %ElixirLLM.RateLimitError{retry_after: seconds}} ->
+    Process.sleep(seconds * 1000)
+    # Retry...
+
+  {:error, %ElixirLLM.AuthenticationError{}} ->
+    Logger.error("Invalid API key")
+
+  {:error, %ElixirLLM.ValidationError{message: msg}} ->
+    Logger.error("Invalid request: #{msg}")
+
+  {:error, %ElixirLLM.NetworkError{}} ->
+    # Retry with backoff
+
+  {:error, %ElixirLLM.TimeoutError{}} ->
+    # Increase timeout or retry
+
+  {:error, %ElixirLLM.ProviderError{provider: provider, message: msg}} ->
+    Logger.error("#{provider} error: #{msg}")
+end
+```
+
+### Error Types
+
+| Error | When |
+|-------|------|
+| `RateLimitError` | API rate limit exceeded (429) |
+| `AuthenticationError` | Invalid or missing API key (401) |
+| `ValidationError` | Invalid request parameters (400) |
+| `NetworkError` | Connection failed |
+| `TimeoutError` | Request timed out |
+| `ProviderError` | Provider-specific error (500, etc.) |
+| `ToolError` | Tool execution failed |
+| `MaxDepthError` | Tool loop exceeded max iterations |
+
+### Checking Retryability
+
+```elixir
+alias ElixirLLM.Error.Helpers
+
+case ElixirLLM.chat("Hello!") do
+  {:error, error} when Helpers.retryable?(error) ->
+    # Safe to retry (rate limits, timeouts, network errors)
+    Retry.with_retry(fn -> ElixirLLM.chat("Hello!") end)
+
+  {:error, error} ->
+    # Don't retry (auth errors, validation errors)
+    {:error, error}
+end
+```
 
 ---
 
@@ -464,8 +631,8 @@ mix docs
 
 ## Roadmap
 
-- [ ] Google Gemini provider
 - [ ] AWS Bedrock provider
+- [ ] Azure OpenAI provider
 - [ ] Function calling with multiple parallel tools
 - [ ] Vision streaming
 - [ ] Audio input/output (Whisper, TTS)

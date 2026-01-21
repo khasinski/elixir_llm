@@ -3,47 +3,73 @@ defmodule ElixirLLM.Providers.Anthropic do
   Anthropic API provider implementation.
 
   Supports Claude models (claude-3-opus, claude-3-sonnet, claude-3-haiku, etc.).
+
+  ## Configuration
+
+      config :elixir_llm,
+        anthropic: [
+          api_key: System.get_env("ANTHROPIC_API_KEY"),
+          timeout: 120_000  # optional
+        ]
+
+  ## Model Names
+
+  Use Anthropic model identifiers:
+
+      ElixirLLM.new()
+      |> ElixirLLM.model("claude-sonnet-4-20250514")
+      |> ElixirLLM.ask("Hello!")
+
+  Available models:
+    * `claude-sonnet-4-20250514` - Latest Claude 4 Sonnet
+    * `claude-3-5-sonnet-20241022` - Claude 3.5 Sonnet
+    * `claude-3-opus-20240229` - Most capable Claude 3
+    * `claude-3-haiku-20240307` - Fast and efficient
   """
 
   @behaviour ElixirLLM.Provider
 
   alias ElixirLLM.{Chat, Chunk, Config, Response, Telemetry, ToolCall}
+  alias ElixirLLM.Error.Helpers, as: ErrorHelpers
+  alias ElixirLLM.Providers.Base
 
   @default_base_url "https://api.anthropic.com"
   @api_version "2023-06-01"
+  @provider :anthropic
 
   @impl true
   def chat(%Chat{} = chat) do
-    metadata = %{provider: :anthropic, model: chat.model}
+    metadata = %{provider: @provider, model: chat.model}
 
     Telemetry.span(:chat, metadata, fn ->
       body = build_request_body(chat, stream: false)
 
-      case make_request("/v1/messages", body, chat) do
+      case make_request("/v1/messages", body) do
         {:ok, %{status: 200, body: response_body}} ->
           response = parse_response(response_body)
           Telemetry.emit(:chat_complete, %{tokens: response.total_tokens}, metadata)
           {:ok, response}
 
         {:ok, %{status: status, body: body}} ->
-          error = parse_error(status, body)
+          error = Base.parse_error(status, body, @provider)
           Telemetry.emit(:chat_error, %{error: error}, metadata)
           {:error, error}
 
         {:error, reason} ->
-          Telemetry.emit(:chat_error, %{error: reason}, metadata)
-          {:error, reason}
+          error = ErrorHelpers.from_transport_error(reason, @provider)
+          Telemetry.emit(:chat_error, %{error: error}, metadata)
+          {:error, error}
       end
     end)
   end
 
   @impl true
   def stream(%Chat{} = chat, callback) when is_function(callback, 1) do
-    metadata = %{provider: :anthropic, model: chat.model}
+    metadata = %{provider: @provider, model: chat.model}
     body = build_request_body(chat, stream: true)
 
     Telemetry.span(:stream, metadata, fn ->
-      case make_stream_request("/v1/messages", body, chat, callback) do
+      case make_stream_request("/v1/messages", body, callback) do
         {:ok, response} ->
           {:ok, response}
 
@@ -116,15 +142,12 @@ defmodule ElixirLLM.Providers.Anthropic do
       max_tokens: chat.max_tokens || 4096
     }
 
-    body =
-      body
-      |> maybe_add(:system, if(system_content != "", do: system_content))
-      |> maybe_add(:temperature, chat.temperature)
-      |> maybe_add(:stream, Keyword.get(opts, :stream, false))
-      |> maybe_add_tools(chat.tools)
-      |> Map.merge(chat.params)
-
     body
+    |> Base.maybe_add(:system, if(system_content != "", do: system_content))
+    |> Base.maybe_add(:temperature, chat.temperature)
+    |> Base.maybe_add(:stream, Keyword.get(opts, :stream, false))
+    |> maybe_add_tools(chat.tools)
+    |> Map.merge(chat.params)
   end
 
   defp format_messages(messages) do
@@ -186,7 +209,7 @@ defmodule ElixirLLM.Providers.Anthropic do
     %{
       name: tool.name(),
       description: tool.description(),
-      input_schema: format_input_schema(tool.parameters())
+      input_schema: Base.format_parameters(tool.parameters())
     }
   end
 
@@ -194,32 +217,7 @@ defmodule ElixirLLM.Providers.Anthropic do
     %{
       name: name,
       description: desc,
-      input_schema: format_input_schema(params)
-    }
-  end
-
-  defp format_input_schema(params) when is_map(params) do
-    properties =
-      Enum.reduce(params, %{}, fn {name, opts}, acc ->
-        prop = %{type: to_string(Keyword.get(opts, :type, :string))}
-
-        prop =
-          if desc = Keyword.get(opts, :description),
-            do: Map.put(prop, :description, desc),
-            else: prop
-
-        Map.put(acc, name, prop)
-      end)
-
-    required =
-      params
-      |> Enum.filter(fn {_, opts} -> Keyword.get(opts, :required, true) end)
-      |> Enum.map(fn {name, _} -> to_string(name) end)
-
-    %{
-      type: "object",
-      properties: properties,
-      required: required
+      input_schema: Base.format_parameters(params)
     }
   end
 
@@ -262,9 +260,6 @@ defmodule ElixirLLM.Providers.Anthropic do
 
   defp parse_delta(_), do: nil
 
-  defp maybe_add(map, _key, nil), do: map
-  defp maybe_add(map, key, value), do: Map.put(map, key, value)
-
   defp maybe_add_tools(map, []), do: map
 
   defp maybe_add_tools(map, tools) do
@@ -278,73 +273,63 @@ defmodule ElixirLLM.Providers.Anthropic do
   defp parse_stop_reason("tool_use"), do: :tool_calls
   defp parse_stop_reason(other), do: String.to_atom(other)
 
-  defp parse_error(status, body) when is_map(body) do
-    message = get_in(body, ["error", "message"]) || "Unknown error"
-    %{status: status, message: message, body: body}
-  end
-
-  defp parse_error(status, body) do
-    %{status: status, message: "Request failed", body: body}
-  end
-
-  defp make_request(path, body, _chat) do
-    base_url = Config.base_url(:anthropic) || @default_base_url
-    api_key = Config.api_key(:anthropic)
+  defp make_request(path, body) do
+    base_url = Config.base_url(@provider) || @default_base_url
+    api_key = Base.require_api_key!(@provider)
+    timeout = Base.get_timeout(@provider)
 
     Req.post(
       base_url <> path,
       json: body,
       headers: build_headers(api_key),
-      receive_timeout: 120_000
+      receive_timeout: timeout
     )
   end
 
-  defp make_stream_request(path, body, _chat, callback) do
-    base_url = Config.base_url(:anthropic) || @default_base_url
-    api_key = Config.api_key(:anthropic)
+  defp make_stream_request(path, body, callback) do
+    base_url = Config.base_url(@provider) || @default_base_url
+    api_key = Base.require_api_key!(@provider)
+    timeout = Base.get_timeout(@provider)
 
-    accumulated = %{
-      content: "",
-      tool_calls: [],
-      model: nil,
-      input_tokens: nil,
-      output_tokens: nil,
-      finish_reason: nil
-    }
+    # Initialize accumulator in process dictionary
+    Base.init_stream_accumulator()
 
-    into_fun = fn {:data, data}, {req, resp, acc} ->
-      events = parse_sse_events(data)
-
-      new_acc =
-        Enum.reduce(events, acc, fn event_data, current_acc ->
-          case parse_chunk(event_data) do
-            nil ->
-              current_acc
-
-            chunk ->
-              callback.(chunk)
-              accumulate_chunk(current_acc, chunk)
-          end
-        end)
-
-      {:cont, {req, resp, new_acc}}
+    into_fun = fn {:data, data}, {req, resp} ->
+      events = Base.parse_sse_data(data)
+      Enum.each(events, &process_stream_event(&1, callback))
+      {:cont, {req, resp}}
     end
 
     case Req.post(
            base_url <> path,
            json: body,
            headers: build_headers(api_key),
-           receive_timeout: 120_000,
-           into: {:fold, accumulated, into_fun}
+           receive_timeout: timeout,
+           into: into_fun
          ) do
-      {:ok, %{status: 200, body: {_req, _resp, final_acc}}} ->
-        {:ok, build_final_response(final_acc)}
+      {:ok, %{status: 200}} ->
+        final_acc = Base.get_stream_accumulator()
+        {:ok, Base.build_final_response(final_acc)}
 
-      {:ok, %{status: status, body: body}} ->
-        {:error, parse_error(status, body)}
+      {:ok, %{status: status, body: error_body}} ->
+        Base.get_stream_accumulator()
+        {:error, Base.parse_error(status, error_body, @provider)}
 
       {:error, reason} ->
-        {:error, reason}
+        Base.get_stream_accumulator()
+        {:error, ErrorHelpers.from_transport_error(reason, @provider)}
+    end
+  end
+
+  defp process_stream_event(event_data, callback) do
+    case parse_chunk(event_data) do
+      nil ->
+        :ok
+
+      chunk ->
+        callback.(chunk)
+        acc = Process.get(:elixir_llm_stream_accumulator, Base.initial_accumulator())
+        Process.put(:elixir_llm_stream_accumulator, Base.accumulate_chunk(acc, chunk))
     end
   end
 
@@ -354,60 +339,5 @@ defmodule ElixirLLM.Providers.Anthropic do
       {"anthropic-version", @api_version},
       {"content-type", "application/json"}
     ]
-  end
-
-  defp parse_sse_events(data) do
-    data
-    |> String.split("\n\n")
-    |> Enum.flat_map(&parse_sse_event/1)
-  end
-
-  defp parse_sse_event(event_str) do
-    lines = String.split(event_str, "\n")
-
-    data_line =
-      Enum.find(lines, fn line ->
-        String.starts_with?(line, "data: ")
-      end)
-
-    case data_line do
-      nil ->
-        []
-
-      line ->
-        json = String.trim_leading(line, "data: ")
-
-        case Jason.decode(json) do
-          {:ok, parsed} -> [parsed]
-          {:error, _} -> []
-        end
-    end
-  end
-
-  defp accumulate_chunk(acc, chunk) do
-    %{
-      acc
-      | content: (acc.content || "") <> (chunk.content || ""),
-        model: chunk.model || acc.model,
-        input_tokens: chunk.input_tokens || acc.input_tokens,
-        output_tokens: chunk.output_tokens || acc.output_tokens,
-        finish_reason: chunk.finish_reason || acc.finish_reason
-    }
-  end
-
-  defp build_final_response(acc) do
-    Response.new(
-      content: if(acc.content == "", do: nil, else: acc.content),
-      tool_calls: if(acc.tool_calls == [], do: nil, else: acc.tool_calls),
-      model: acc.model,
-      input_tokens: acc.input_tokens,
-      output_tokens: acc.output_tokens,
-      total_tokens:
-        if(acc.input_tokens && acc.output_tokens,
-          do: acc.input_tokens + acc.output_tokens,
-          else: nil
-        ),
-      finish_reason: acc.finish_reason
-    )
   end
 end

@@ -78,6 +78,7 @@ defmodule ElixirLLM do
 
   # Re-export Chat functions for pipe-friendly API
   defdelegate model(chat, model_id), to: Chat
+  defdelegate provider(chat, provider), to: Chat
   defdelegate temperature(chat, temp), to: Chat
   defdelegate max_tokens(chat, tokens), to: Chat
   defdelegate instructions(chat, content, opts \\ []), to: Chat
@@ -87,6 +88,12 @@ defmodule ElixirLLM do
   defdelegate on_tool_call(chat, callback), to: Chat
   defdelegate on_tool_result(chat, callback), to: Chat
   defdelegate params(chat, params), to: Chat
+
+  # Resilience options
+  defdelegate with_retry(chat, opts \\ []), to: Chat
+  defdelegate with_cache(chat), to: Chat
+  defdelegate with_rate_limiting(chat), to: Chat
+  defdelegate with_circuit_breaker(chat), to: Chat
 
   @doc """
   Creates a new chat instance.
@@ -118,7 +125,7 @@ defmodule ElixirLLM do
       {:ok, response} = ElixirLLM.chat("What is Elixir?")
       {:ok, response} = ElixirLLM.chat("Explain OTP", model: "claude-sonnet-4-5")
   """
-  @spec chat(String.t(), keyword()) :: {:ok, Response.t()} | {:error, term()}
+  @spec chat(String.t(), keyword()) :: {:ok, Response.t()} | {:error, Exception.t()}
   def chat(message, opts \\ []) do
     new(opts)
     |> Chat.add_message(Message.user(message))
@@ -149,7 +156,7 @@ defmodule ElixirLLM do
       end)
   """
   @spec ask(Chat.t(), String.t(), keyword()) ::
-          {:ok, Response.t(), Chat.t()} | {:error, term()}
+          {:ok, Response.t(), Chat.t()} | {:error, Exception.t()}
   def ask(%Chat{} = chat, message, opts \\ []) do
     chat = Chat.add_message(chat, Message.user(message))
 
@@ -214,31 +221,74 @@ defmodule ElixirLLM do
 
   defp do_ask(%Chat{} = chat, opts) do
     provider = get_provider(chat)
+    provider_atom = get_provider_atom(chat)
 
-    case Keyword.get(opts, :stream) do
-      nil ->
-        # Non-streaming request
-        case provider.chat(chat) do
-          {:ok, response} ->
-            # Handle tool calls if present
-            handle_tool_calls(chat, response, provider)
+    request_fn = fn ->
+      case Keyword.get(opts, :stream) do
+        nil ->
+          # Non-streaming request
+          provider.chat(chat)
 
-          error ->
-            error
-        end
+        callback when is_function(callback, 1) ->
+          # Streaming request
+          provider.stream(chat, callback)
+      end
+    end
 
-      callback when is_function(callback, 1) ->
-        # Streaming request
-        case provider.stream(chat, callback) do
-          {:ok, response} ->
-            # Handle tool calls if present
-            handle_tool_calls(chat, response, provider)
+    # Wrap with resilience features (order matters: cache -> rate_limit -> circuit_breaker -> retry -> request)
+    wrapped_fn = request_fn
+    |> maybe_wrap_retry(chat.retry)
+    |> maybe_wrap_circuit_breaker(chat.circuit_breaker, provider_atom)
+    |> maybe_wrap_rate_limit(chat.rate_limit, provider_atom)
+    |> maybe_wrap_cache(chat.cache, chat)
 
-          error ->
-            error
-        end
+    case wrapped_fn.() do
+      {:ok, response} ->
+        handle_tool_calls(chat, response, provider)
+
+      error ->
+        error
     end
   end
+
+  # Resilience wrappers
+
+  defp maybe_wrap_retry(fun, false), do: fun
+  defp maybe_wrap_retry(fun, opts) when is_list(opts) do
+    fn -> ElixirLLM.Retry.with_retry(fun, opts) end
+  end
+
+  defp maybe_wrap_circuit_breaker(fun, false, _provider), do: fun
+  defp maybe_wrap_circuit_breaker(fun, true, provider) do
+    fn -> ElixirLLM.CircuitBreaker.call(provider, fun) end
+  end
+
+  defp maybe_wrap_rate_limit(fun, false, _provider), do: fun
+  defp maybe_wrap_rate_limit(fun, true, provider) do
+    fn ->
+      :ok = ElixirLLM.RateLimiter.acquire(provider)
+      fun.()
+    end
+  end
+
+  defp maybe_wrap_cache(fun, false, _chat), do: fun
+  defp maybe_wrap_cache(fun, true, chat) do
+    fn ->
+      cache_key = ElixirLLM.Cache.key(chat)
+      ElixirLLM.Cache.fetch(cache_key, fun)
+    end
+  end
+
+  defp get_provider_atom(%Chat{provider: nil}), do: :openai
+  defp get_provider_atom(%Chat{provider: ElixirLLM.Providers.OpenAI}), do: :openai
+  defp get_provider_atom(%Chat{provider: ElixirLLM.Providers.Anthropic}), do: :anthropic
+  defp get_provider_atom(%Chat{provider: ElixirLLM.Providers.Gemini}), do: :gemini
+  defp get_provider_atom(%Chat{provider: ElixirLLM.Providers.Mistral}), do: :mistral
+  defp get_provider_atom(%Chat{provider: ElixirLLM.Providers.Groq}), do: :groq
+  defp get_provider_atom(%Chat{provider: ElixirLLM.Providers.Together}), do: :together
+  defp get_provider_atom(%Chat{provider: ElixirLLM.Providers.OpenRouter}), do: :openrouter
+  defp get_provider_atom(%Chat{provider: ElixirLLM.Providers.Ollama}), do: :ollama
+  defp get_provider_atom(_), do: :unknown
 
   defp get_provider(%Chat{provider: nil, model: nil}) do
     ElixirLLM.Config.default_provider()
@@ -278,29 +328,31 @@ defmodule ElixirLLM do
       # Add tool results to chat
       chat =
         Enum.reduce(tool_results, chat, fn {tool_call_id, result}, acc ->
-          result_content =
-            case result do
-              {:ok, value} -> encode_result(value)
-              {:error, reason} -> "Error: #{inspect(reason)}"
-            end
-
+          result_content = format_tool_result(result)
           Chat.add_message(acc, Message.tool_result(tool_call_id, result_content))
         end)
 
       # Continue the conversation
       case provider.chat(chat) do
         {:ok, new_response} ->
-          if Response.has_tool_calls?(new_response) do
-            execute_tool_loop(chat, new_response, provider, depth + 1)
-          else
-            {:ok, new_response}
-          end
+          continue_or_return(chat, new_response, provider, depth)
 
         error ->
           error
       end
     end
   end
+
+  defp continue_or_return(chat, response, provider, depth) do
+    if Response.has_tool_calls?(response) do
+      execute_tool_loop(chat, response, provider, depth + 1)
+    else
+      {:ok, response}
+    end
+  end
+
+  defp format_tool_result({:ok, value}), do: encode_result(value)
+  defp format_tool_result({:error, reason}), do: "Error: #{inspect(reason)}"
 
   defp execute_tool_call(chat, tool_call) do
     start_time = System.monotonic_time()

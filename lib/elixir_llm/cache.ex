@@ -142,7 +142,11 @@ defmodule ElixirLLM.Cache do
   @spec clear() :: :ok
   def clear do
     ensure_started()
-    :ets.delete_all_objects(@table_name)
+
+    if :ets.whereis(@table_name) != :undefined do
+      :ets.delete_all_objects(@table_name)
+    end
+
     :ok
   end
 
@@ -209,12 +213,27 @@ defmodule ElixirLLM.Cache do
     case Process.whereis(__MODULE__) do
       nil ->
         case start_link() do
-          {:ok, _pid} -> :ok
-          {:error, {:already_started, _pid}} -> :ok
+          {:ok, _pid} -> wait_for_table()
+          {:error, {:already_started, _pid}} -> wait_for_table()
         end
 
       _pid ->
-        :ok
+        # Process exists, but table might still be initializing
+        wait_for_table()
+    end
+  end
+
+  defp wait_for_table(attempts \\ 0)
+  defp wait_for_table(attempts) when attempts > 50 do
+    :ok  # Give up after ~500ms
+  end
+
+  defp wait_for_table(attempts) do
+    if :ets.whereis(@table_name) != :undefined do
+      :ok
+    else
+      Process.sleep(10)
+      wait_for_table(attempts + 1)
     end
   end
 

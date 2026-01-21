@@ -30,7 +30,12 @@ defmodule ElixirLLM.Chat do
           on_tool_call: callback() | nil,
           on_tool_result: callback() | nil,
           on_chunk: callback() | nil,
-          params: map()
+          params: map(),
+          # Resilience options
+          retry: keyword() | false,
+          cache: boolean(),
+          rate_limit: boolean(),
+          circuit_breaker: boolean()
         }
 
   defstruct [
@@ -44,7 +49,12 @@ defmodule ElixirLLM.Chat do
     on_tool_call: nil,
     on_tool_result: nil,
     on_chunk: nil,
-    params: %{}
+    params: %{},
+    # Resilience: disabled by default, users opt-in
+    retry: false,
+    cache: false,
+    rate_limit: false,
+    circuit_breaker: false
   ]
 
   @doc """
@@ -62,6 +72,34 @@ defmodule ElixirLLM.Chat do
   def model(%__MODULE__{} = chat, model_id) when is_binary(model_id) do
     provider = ElixirLLM.Config.provider_for_model(model_id)
     %{chat | model: model_id, provider: provider}
+  end
+
+  @doc """
+  Explicitly sets the provider for the chat.
+
+  This overrides the auto-detected provider from the model name.
+  Accepts either a provider atom (`:openai`, `:anthropic`, etc.) or
+  a provider module directly.
+
+  ## Examples
+
+      chat = ElixirLLM.new()
+      |> ElixirLLM.provider(:anthropic)
+      |> ElixirLLM.model("claude-3-opus-20240229")
+
+      # Use OpenRouter for any model
+      chat = ElixirLLM.new()
+      |> ElixirLLM.provider(:openrouter)
+      |> ElixirLLM.model("anthropic/claude-3-opus")
+
+      # With a custom provider module
+      chat = ElixirLLM.new()
+      |> ElixirLLM.provider(MyApp.CustomProvider)
+  """
+  @spec provider(t(), atom() | module()) :: t()
+  def provider(%__MODULE__{} = chat, provider) when is_atom(provider) do
+    provider_module = ElixirLLM.Config.get_provider_module(provider)
+    %{chat | provider: provider_module}
   end
 
   @doc """
@@ -144,6 +182,88 @@ defmodule ElixirLLM.Chat do
   @spec schema(t(), module()) :: t()
   def schema(%__MODULE__{} = chat, schema_module) when is_atom(schema_module) do
     %{chat | schema: schema_module}
+  end
+
+  # ===========================================================================
+  # Resilience Options
+  # ===========================================================================
+
+  @doc """
+  Enables automatic retry with exponential backoff.
+
+  ## Options
+
+    * `:max_attempts` - Maximum retry attempts (default: 3)
+    * `:base_delay_ms` - Initial delay between retries (default: 1000)
+    * `:max_delay_ms` - Maximum delay between retries (default: 30000)
+    * `:jitter` - Add random jitter to delays (default: true)
+    * `:on_retry` - Callback `(attempt, error) -> any()` called before each retry
+
+  ## Examples
+
+      chat
+      |> ElixirLLM.with_retry()
+      |> ElixirLLM.ask("Hello!")
+
+      chat
+      |> ElixirLLM.with_retry(max_attempts: 5, base_delay_ms: 500)
+      |> ElixirLLM.ask("Hello!")
+  """
+  @spec with_retry(t(), keyword()) :: t()
+  def with_retry(%__MODULE__{} = chat, opts \\ []) do
+    %{chat | retry: opts}
+  end
+
+  @doc """
+  Enables response caching.
+
+  Caches responses based on model, messages, and settings to reduce API costs.
+  Cache configuration (TTL, max entries) is set in application config.
+
+  ## Example
+
+      chat
+      |> ElixirLLM.with_cache()
+      |> ElixirLLM.ask("What is 2+2?")  # First call hits API
+      |> ElixirLLM.ask("What is 2+2?")  # Second call returns cached response
+  """
+  @spec with_cache(t()) :: t()
+  def with_cache(%__MODULE__{} = chat) do
+    %{chat | cache: true}
+  end
+
+  @doc """
+  Enables client-side rate limiting.
+
+  Automatically acquires tokens before making requests to prevent hitting
+  provider rate limits. Rate limits are configured per provider in application config.
+
+  ## Example
+
+      chat
+      |> ElixirLLM.with_rate_limiting()
+      |> ElixirLLM.ask("Hello!")
+  """
+  @spec with_rate_limiting(t()) :: t()
+  def with_rate_limiting(%__MODULE__{} = chat) do
+    %{chat | rate_limit: true}
+  end
+
+  @doc """
+  Enables circuit breaker protection.
+
+  Prevents cascading failures by temporarily blocking requests to failing providers.
+  Configuration (failure threshold, recovery timeout) is set in application config.
+
+  ## Example
+
+      chat
+      |> ElixirLLM.with_circuit_breaker()
+      |> ElixirLLM.ask("Hello!")
+  """
+  @spec with_circuit_breaker(t()) :: t()
+  def with_circuit_breaker(%__MODULE__{} = chat) do
+    %{chat | circuit_breaker: true}
   end
 
   @doc """

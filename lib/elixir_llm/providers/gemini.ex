@@ -2,13 +2,14 @@ defmodule ElixirLLM.Providers.Gemini do
   @moduledoc """
   Google Gemini API provider implementation.
 
-  Supports Gemini models (gemini-2.0-flash, gemini-1.5-pro, gemini-1.5-flash, etc.).
+  Supports all Gemini models including the latest 2.5 and 2.0 series.
 
   ## Configuration
 
       config :elixir_llm,
         gemini: [
-          api_key: System.get_env("GOOGLE_API_KEY")
+          api_key: System.get_env("GOOGLE_API_KEY"),
+          timeout: 120_000  # optional
         ]
 
   ## Model Names
@@ -20,55 +21,72 @@ defmodule ElixirLLM.Providers.Gemini do
       |> ElixirLLM.ask("Hello!")
 
   Available models:
-    * `gemini-2.0-flash` - Fast, efficient model
-    * `gemini-2.0-flash-thinking` - Enhanced reasoning
-    * `gemini-1.5-pro` - Most capable model
+
+  ### Gemini 2.5 Series (Latest)
+    * `gemini-2.5-pro-preview-05-06` - Most capable, multimodal reasoning
+    * `gemini-2.5-flash-preview-05-20` - Fast and efficient
+
+  ### Gemini 2.0 Series
+    * `gemini-2.0-flash` - Fast, efficient model (default)
+    * `gemini-2.0-flash-lite` - Lightweight "nano" model, lowest latency
+    * `gemini-2.0-flash-thinking-exp` - Enhanced reasoning with thinking
+
+  ### Gemini 1.5 Series
+    * `gemini-1.5-pro` - Most capable 1.5 model
     * `gemini-1.5-flash` - Fast and versatile
     * `gemini-1.5-flash-8b` - Lightweight model
+
+  ### Experimental
+    * `gemini-exp-1206` - Experimental model
+    * `learnlm-1.5-pro-experimental` - Learning-focused model
   """
 
   @behaviour ElixirLLM.Provider
 
   alias ElixirLLM.{Chat, Chunk, Config, Response, Telemetry, ToolCall}
+  alias ElixirLLM.Error.Helpers, as: ErrorHelpers
+  alias ElixirLLM.Providers.Base
 
   @default_base_url "https://generativelanguage.googleapis.com/v1beta"
+  @provider :gemini
 
   @impl true
   def chat(%Chat{} = chat) do
-    metadata = %{provider: :gemini, model: chat.model}
+    metadata = %{provider: @provider, model: chat.model}
 
     Telemetry.span(:chat, metadata, fn ->
       body = build_request_body(chat, stream: false)
       model = chat.model || "gemini-2.0-flash"
       path = "/models/#{model}:generateContent"
 
-      case make_request(path, body, chat) do
+      case make_request(path, body) do
         {:ok, %{status: 200, body: response_body}} ->
           response = parse_response(response_body)
           Telemetry.emit(:chat_complete, %{tokens: response.total_tokens}, metadata)
           {:ok, response}
 
         {:ok, %{status: status, body: body}} ->
-          error = parse_error(status, body)
+          error = Base.parse_error(status, body, @provider)
           Telemetry.emit(:chat_error, %{error: error}, metadata)
           {:error, error}
 
         {:error, reason} ->
-          Telemetry.emit(:chat_error, %{error: reason}, metadata)
-          {:error, reason}
+          error = ErrorHelpers.from_transport_error(reason, @provider)
+          Telemetry.emit(:chat_error, %{error: error}, metadata)
+          {:error, error}
       end
     end)
   end
 
   @impl true
   def stream(%Chat{} = chat, callback) when is_function(callback, 1) do
-    metadata = %{provider: :gemini, model: chat.model}
+    metadata = %{provider: @provider, model: chat.model}
     body = build_request_body(chat, stream: true)
     model = chat.model || "gemini-2.0-flash"
     path = "/models/#{model}:streamGenerateContent"
 
     Telemetry.span(:stream, metadata, fn ->
-      case make_stream_request(path, body, chat, callback) do
+      case make_stream_request(path, body, callback) do
         {:ok, response} ->
           {:ok, response}
 
@@ -150,21 +168,16 @@ defmodule ElixirLLM.Providers.Gemini do
       generationConfig: build_generation_config(chat)
     }
 
-    body =
-      body
-      |> maybe_add(:systemInstruction, system_instruction)
-      |> maybe_add_tools(chat.tools)
-
     body
+    |> Base.maybe_add(:systemInstruction, system_instruction)
+    |> maybe_add_tools(chat.tools)
   end
 
   defp build_generation_config(chat) do
-    config = %{}
-
     config =
-      config
-      |> maybe_add(:temperature, chat.temperature)
-      |> maybe_add(:maxOutputTokens, chat.max_tokens)
+      %{}
+      |> Base.maybe_add(:temperature, chat.temperature)
+      |> Base.maybe_add(:maxOutputTokens, chat.max_tokens)
 
     if config == %{}, do: nil, else: config
   end
@@ -318,9 +331,6 @@ defmodule ElixirLLM.Providers.Gemini do
     {if(text_content == "", do: nil, else: text_content), tool_calls}
   end
 
-  defp maybe_add(map, _key, nil), do: map
-  defp maybe_add(map, key, value), do: Map.put(map, key, value)
-
   defp maybe_add_tools(map, []), do: map
 
   defp maybe_add_tools(map, tools) do
@@ -335,122 +345,49 @@ defmodule ElixirLLM.Providers.Gemini do
   defp parse_finish_reason("OTHER"), do: :stop
   defp parse_finish_reason(other), do: String.to_atom(String.downcase(other))
 
-  defp parse_error(status, body) when is_map(body) do
-    message = get_in(body, ["error", "message"]) || "Unknown error"
-    %{status: status, message: message, body: body}
-  end
-
-  defp parse_error(status, body) do
-    %{status: status, message: "Request failed", body: body}
-  end
-
-  defp make_request(path, body, _chat) do
-    base_url = Config.base_url(:gemini) || @default_base_url
-    api_key = Config.api_key(:gemini)
+  defp make_request(path, body) do
+    base_url = Config.base_url(@provider) || @default_base_url
+    api_key = Base.require_api_key!(@provider)
+    timeout = Base.get_timeout(@provider)
 
     Req.post(
       base_url <> path,
       json: body,
       headers: [{"content-type", "application/json"}],
       params: [key: api_key],
-      receive_timeout: 120_000
+      receive_timeout: timeout
     )
   end
 
-  defp make_stream_request(path, body, _chat, callback) do
-    base_url = Config.base_url(:gemini) || @default_base_url
-    api_key = Config.api_key(:gemini)
+  defp make_stream_request(path, body, callback) do
+    base_url = Config.base_url(@provider) || @default_base_url
+    api_key = Base.require_api_key!(@provider)
+    timeout = Base.get_timeout(@provider)
 
-    accumulated = %{
-      content: "",
-      tool_calls: [],
-      model: nil,
-      input_tokens: nil,
-      output_tokens: nil,
-      finish_reason: nil
-    }
+    # Initialize accumulator in process dictionary
+    Base.init_stream_accumulator()
 
-    into_fun = fn {:data, data}, {req, resp, acc} ->
-      chunks = parse_json_stream(data)
-
-      new_acc =
-        Enum.reduce(chunks, acc, fn chunk_data, current_acc ->
-          case parse_chunk(chunk_data) do
-            nil ->
-              current_acc
-
-            chunk ->
-              callback.(chunk)
-              accumulate_chunk(current_acc, chunk)
-          end
-        end)
-
-      {:cont, {req, resp, new_acc}}
-    end
+    into_fun = Base.create_sse_stream_fun(callback, &parse_chunk/1)
 
     case Req.post(
            base_url <> path,
            json: body,
            headers: [{"content-type", "application/json"}],
            params: [key: api_key, alt: "sse"],
-           receive_timeout: 120_000,
-           into: {:fold, accumulated, into_fun}
+           receive_timeout: timeout,
+           into: into_fun
          ) do
-      {:ok, %{status: 200, body: {_req, _resp, final_acc}}} ->
-        {:ok, build_final_response(final_acc)}
+      {:ok, %{status: 200}} ->
+        final_acc = Base.get_stream_accumulator()
+        {:ok, Base.build_final_response(final_acc)}
 
-      {:ok, %{status: status, body: body}} ->
-        {:error, parse_error(status, body)}
+      {:ok, %{status: status, body: error_body}} ->
+        Base.get_stream_accumulator()
+        {:error, Base.parse_error(status, error_body, @provider)}
 
       {:error, reason} ->
-        {:error, reason}
+        Base.get_stream_accumulator()
+        {:error, ErrorHelpers.from_transport_error(reason, @provider)}
     end
-  end
-
-  defp parse_json_stream(data) do
-    data
-    |> String.split("\n")
-    |> Enum.filter(&String.starts_with?(&1, "data: "))
-    |> Enum.map(&String.trim_leading(&1, "data: "))
-    |> Enum.reject(&(&1 == ""))
-    |> Enum.map(fn json ->
-      case Jason.decode(json) do
-        {:ok, parsed} -> parsed
-        {:error, _} -> nil
-      end
-    end)
-    |> Enum.reject(&is_nil/1)
-  end
-
-  defp accumulate_chunk(acc, chunk) do
-    %{
-      acc
-      | content: (acc.content || "") <> (chunk.content || ""),
-        tool_calls: merge_tool_calls(acc.tool_calls, chunk.tool_calls),
-        model: chunk.model || acc.model,
-        input_tokens: chunk.input_tokens || acc.input_tokens,
-        output_tokens: chunk.output_tokens || acc.output_tokens,
-        finish_reason: chunk.finish_reason || acc.finish_reason
-    }
-  end
-
-  defp merge_tool_calls(existing, nil), do: existing
-  defp merge_tool_calls(existing, []), do: existing
-  defp merge_tool_calls(existing, new), do: existing ++ new
-
-  defp build_final_response(acc) do
-    Response.new(
-      content: if(acc.content == "", do: nil, else: acc.content),
-      tool_calls: if(acc.tool_calls == [], do: nil, else: acc.tool_calls),
-      model: acc.model,
-      input_tokens: acc.input_tokens,
-      output_tokens: acc.output_tokens,
-      total_tokens:
-        if(acc.input_tokens && acc.output_tokens,
-          do: acc.input_tokens + acc.output_tokens,
-          else: nil
-        ),
-      finish_reason: acc.finish_reason
-    )
   end
 end

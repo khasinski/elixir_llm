@@ -210,7 +210,9 @@ end
 
 # Now add the helper functions back to the main module
 defmodule ElixirLLM.Error.Helpers do
-  @moduledoc false
+  @moduledoc """
+  Helper functions for error handling.
+  """
 
   alias ElixirLLM.Error
 
@@ -227,24 +229,104 @@ defmodule ElixirLLM.Error.Helpers do
   def retryable?(_), do: false
 
   @doc """
-  Converts a raw error response from a provider into a structured error.
+  Creates a structured error from an HTTP status code and message.
+
+  Can be called in two forms:
+    * `from_response(status, message, opts)` - with status, message, and options
+    * `from_response(response_map, provider)` - with a response map containing :status, :message, :body
+
+  ## Options
+    * `:provider` - The provider atom (e.g., :openai)
+    * `:body` - The raw response body
+    * `:retry_after` - Seconds to wait before retrying (for rate limits)
   """
-  @spec from_response(map() | term(), atom()) :: Exception.t()
-  def from_response(%{status: 401, message: message}, provider) do
+  @spec from_response(map(), atom()) :: Exception.t()
+  @spec from_response(integer(), String.t(), keyword()) :: Exception.t()
+  def from_response(%{status: status, message: message} = response, provider) when is_atom(provider) do
+    from_response(status, message, provider: provider, body: Map.get(response, :body))
+  end
+
+  def from_response(status, message, opts \\ [])
+
+  def from_response(401, message, opts) do
+    %Error.AuthenticationError{
+      message: message,
+      provider: Keyword.get(opts, :provider)
+    }
+  end
+
+  def from_response(403, message, opts) do
+    %Error.AuthenticationError{
+      message: message,
+      provider: Keyword.get(opts, :provider)
+    }
+  end
+
+  def from_response(429, message, opts) do
+    retry_after = Keyword.get(opts, :retry_after) || extract_retry_after(Keyword.get(opts, :body))
+
+    %Error.RateLimitError{
+      message: message,
+      provider: Keyword.get(opts, :provider),
+      retry_after: retry_after
+    }
+  end
+
+  def from_response(400, message, opts) do
+    %Error.ValidationError{
+      message: message,
+      provider: Keyword.get(opts, :provider),
+      details: Keyword.get(opts, :body)
+    }
+  end
+
+  def from_response(422, message, opts) do
+    %Error.ValidationError{
+      message: message,
+      provider: Keyword.get(opts, :provider),
+      details: Keyword.get(opts, :body)
+    }
+  end
+
+  def from_response(status, message, opts) when status in 500..599 do
+    %Error.ProviderError{
+      message: message,
+      provider: Keyword.get(opts, :provider),
+      status: status,
+      body: Keyword.get(opts, :body)
+    }
+  end
+
+  def from_response(status, message, opts) do
+    %Error.APIError{
+      message: message,
+      provider: Keyword.get(opts, :provider),
+      status: status,
+      body: Keyword.get(opts, :body)
+    }
+  end
+
+  @doc """
+  Converts a raw error (map or exception) into a structured error.
+
+  This is the legacy format for backwards compatibility.
+  """
+  @spec from_raw_error(map() | term(), atom()) :: Exception.t()
+  def from_raw_error(%{status: 401, message: message}, provider) do
     %Error.AuthenticationError{
       message: message,
       provider: provider
     }
   end
 
-  def from_response(%{status: 403, message: message}, provider) do
+  def from_raw_error(%{status: 403, message: message}, provider) do
     %Error.AuthenticationError{
       message: message,
       provider: provider
     }
   end
 
-  def from_response(%{status: 429, message: message, body: body}, provider) do
+  def from_raw_error(%{status: 429, message: message, body: body}, provider) do
     retry_after = extract_retry_after(body)
 
     %Error.RateLimitError{
@@ -254,7 +336,7 @@ defmodule ElixirLLM.Error.Helpers do
     }
   end
 
-  def from_response(%{status: 400, message: message, body: body}, provider) do
+  def from_raw_error(%{status: 400, message: message, body: body}, provider) do
     %Error.ValidationError{
       message: message,
       provider: provider,
@@ -262,7 +344,7 @@ defmodule ElixirLLM.Error.Helpers do
     }
   end
 
-  def from_response(%{status: 422, message: message, body: body}, provider) do
+  def from_raw_error(%{status: 422, message: message, body: body}, provider) do
     %Error.ValidationError{
       message: message,
       provider: provider,
@@ -270,7 +352,7 @@ defmodule ElixirLLM.Error.Helpers do
     }
   end
 
-  def from_response(%{status: status, message: message, body: body}, provider)
+  def from_raw_error(%{status: status, message: message, body: body}, provider)
       when status in 500..599 do
     %Error.ProviderError{
       message: message,
@@ -280,7 +362,7 @@ defmodule ElixirLLM.Error.Helpers do
     }
   end
 
-  def from_response(%{status: status, message: message, body: body}, provider) do
+  def from_raw_error(%{status: status, message: message, body: body}, provider) do
     %Error.APIError{
       message: message,
       provider: provider,
@@ -289,14 +371,18 @@ defmodule ElixirLLM.Error.Helpers do
     }
   end
 
-  def from_response(%Req.TransportError{reason: :timeout}, provider) do
+  @doc """
+  Creates a network/transport error from a Req error.
+  """
+  @spec from_transport_error(term(), atom()) :: Exception.t()
+  def from_transport_error(%Req.TransportError{reason: :timeout}, provider) do
     %Error.TimeoutError{
       message: "Request timed out",
       provider: provider
     }
   end
 
-  def from_response(%Req.TransportError{reason: reason}, provider) do
+  def from_transport_error(%Req.TransportError{reason: reason}, provider) do
     %Error.NetworkError{
       message: "Network error: #{inspect(reason)}",
       provider: provider,
@@ -304,20 +390,25 @@ defmodule ElixirLLM.Error.Helpers do
     }
   end
 
-  def from_response(error, provider) when is_atom(error) do
-    %Error.NetworkError{
-      message: "Connection error: #{error}",
-      provider: provider,
-      reason: error
-    }
+  def from_transport_error(error, provider) when is_atom(error) do
+    case error do
+      :timeout ->
+        %Error.TimeoutError{message: "Request timed out", provider: provider}
+
+      _ ->
+        %Error.NetworkError{
+          message: "Connection error: #{error}",
+          provider: provider,
+          reason: error
+        }
+    end
   end
 
-  def from_response(error, provider) do
-    %Error.APIError{
+  def from_transport_error(error, provider) do
+    %Error.NetworkError{
       message: inspect(error),
       provider: provider,
-      status: nil,
-      body: error
+      reason: error
     }
   end
 

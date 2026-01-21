@@ -2,48 +2,69 @@ defmodule ElixirLLM.Providers.Ollama do
   @moduledoc """
   Ollama API provider implementation.
 
-  Supports local models running via Ollama (llama, mistral, codellama, etc.).
-  Uses the OpenAI-compatible API endpoint.
+  Runs LLMs locally using Ollama.
+
+  ## Configuration
+
+      config :elixir_llm,
+        ollama: [
+          base_url: "http://localhost:11434",
+          timeout: 300_000  # optional, longer for local inference
+        ]
+
+  ## Model Names
+
+  Use local model names directly:
+
+      ElixirLLM.new()
+      |> ElixirLLM.model("llama3.2")
+      |> ElixirLLM.ask("Hello!")
+
+  Available models depend on what you've pulled with `ollama pull`.
   """
 
   @behaviour ElixirLLM.Provider
 
   alias ElixirLLM.{Chat, Chunk, Config, Response, Telemetry, ToolCall}
+  alias ElixirLLM.Error.Helpers, as: ErrorHelpers
+  alias ElixirLLM.Providers.Base
 
   @default_base_url "http://localhost:11434"
+  @provider :ollama
 
   @impl true
   def chat(%Chat{} = chat) do
-    metadata = %{provider: :ollama, model: chat.model}
+    metadata = %{provider: @provider, model: chat.model}
 
     Telemetry.span(:chat, metadata, fn ->
       body = build_request_body(chat, stream: false)
 
-      case make_request("/v1/chat/completions", body, chat) do
+      case make_request("/api/chat", body) do
         {:ok, %{status: 200, body: response_body}} ->
           response = parse_response(response_body)
           Telemetry.emit(:chat_complete, %{tokens: response.total_tokens}, metadata)
           {:ok, response}
 
         {:ok, %{status: status, body: body}} ->
-          error = parse_error(status, body)
+          error = Base.parse_error(status, body, @provider)
           Telemetry.emit(:chat_error, %{error: error}, metadata)
           {:error, error}
 
         {:error, reason} ->
-          Telemetry.emit(:chat_error, %{error: reason}, metadata)
-          {:error, reason}
+          error = ErrorHelpers.from_transport_error(reason, @provider)
+          Telemetry.emit(:chat_error, %{error: error}, metadata)
+          {:error, error}
       end
     end)
   end
 
   @impl true
   def stream(%Chat{} = chat, callback) when is_function(callback, 1) do
-    metadata = %{provider: :ollama, model: chat.model}
+    metadata = %{provider: @provider, model: chat.model}
     body = build_request_body(chat, stream: true)
 
     Telemetry.span(:stream, metadata, fn ->
-      case make_stream_request("/v1/chat/completions", body, chat, callback) do
+      case make_stream_request("/api/chat", body, callback) do
         {:ok, response} ->
           {:ok, response}
 
@@ -55,66 +76,63 @@ defmodule ElixirLLM.Providers.Ollama do
   end
 
   @impl true
-  def format_tools(tools) do
-    # Ollama uses OpenAI-compatible format
-    Enum.map(tools, &format_tool/1)
-  end
+  def format_tools(tools), do: Base.format_tools_openai(tools)
 
   @impl true
   def parse_response(body) do
-    # Ollama uses OpenAI-compatible response format
-    choice = List.first(body["choices"] || [])
-    message = choice["message"] || %{}
-    usage = body["usage"] || %{}
+    message = body["message"] || %{}
 
     Response.new(
       content: message["content"],
       tool_calls: parse_tool_calls(message["tool_calls"]),
       model: body["model"],
-      input_tokens: usage["prompt_tokens"],
-      output_tokens: usage["completion_tokens"],
-      total_tokens: usage["total_tokens"],
-      finish_reason: parse_finish_reason(choice["finish_reason"])
+      input_tokens: get_in(body, ["prompt_eval_count"]),
+      output_tokens: get_in(body, ["eval_count"]),
+      total_tokens: calculate_tokens(body),
+      finish_reason: parse_done_reason(body)
     )
   end
 
   @impl true
   def parse_chunk(data) do
-    choice = List.first(data["choices"] || [])
+    message = data["message"] || %{}
 
-    if is_nil(choice) do
-      nil
-    else
-      delta = choice["delta"] || %{}
-      usage = data["usage"]
-
-      Chunk.new(
-        content: delta["content"],
-        tool_calls: parse_tool_calls(delta["tool_calls"]),
-        model: data["model"],
-        input_tokens: usage && usage["prompt_tokens"],
-        output_tokens: usage && usage["completion_tokens"],
-        finish_reason: parse_finish_reason(choice["finish_reason"])
-      )
-    end
+    Chunk.new(
+      content: message["content"],
+      tool_calls: parse_tool_calls(message["tool_calls"]),
+      model: data["model"],
+      input_tokens: get_in(data, ["prompt_eval_count"]),
+      output_tokens: get_in(data, ["eval_count"]),
+      finish_reason: parse_done_reason(data)
+    )
   end
 
   # Private functions
 
   defp build_request_body(%Chat{} = chat, opts) do
     body = %{
-      model: chat.model || "llama3.2",
-      messages: format_messages(chat.messages)
+      model: chat.model,
+      messages: format_messages(chat.messages),
+      stream: Keyword.get(opts, :stream, false)
     }
 
-    body =
-      body
-      |> maybe_add(:temperature, chat.temperature)
-      |> maybe_add(:stream, Keyword.get(opts, :stream, false))
-      |> maybe_add_tools(chat.tools)
-      |> Map.merge(chat.params)
-
     body
+    |> maybe_add_options(chat)
+    |> Base.maybe_add_tools(chat.tools, &format_tools/1)
+    |> Map.merge(chat.params)
+  end
+
+  defp maybe_add_options(body, chat) do
+    options =
+      %{}
+      |> Base.maybe_add(:temperature, chat.temperature)
+      |> Base.maybe_add(:num_predict, chat.max_tokens)
+
+    if map_size(options) > 0 do
+      Map.put(body, :options, options)
+    else
+      body
+    end
   end
 
   defp format_messages(messages) do
@@ -133,7 +151,7 @@ defmodule ElixirLLM.Providers.Ollama do
     msg = %{role: "assistant", content: content || ""}
 
     if tool_calls != nil and tool_calls != [] do
-      Map.put(msg, :tool_calls, Enum.map(tool_calls, &format_tool_call_for_message/1))
+      Map.put(msg, :tool_calls, Enum.map(tool_calls, &format_tool_call/1))
     else
       msg
     end
@@ -143,221 +161,102 @@ defmodule ElixirLLM.Providers.Ollama do
     %{role: "system", content: content}
   end
 
-  defp format_message(%{role: :tool, content: content, tool_call_id: tool_call_id}) do
-    %{role: "tool", content: content, tool_call_id: tool_call_id}
+  defp format_message(%{role: :tool, content: content, tool_call_id: _tool_call_id}) do
+    # Ollama uses a simpler format for tool results
+    %{role: "tool", content: content}
   end
 
-  defp format_tool_call_for_message(%ToolCall{id: id, name: name, arguments: args}) do
+  defp format_tool_call(%ToolCall{name: name, arguments: args}) do
     %{
-      id: id,
-      type: "function",
       function: %{
         name: name,
-        arguments: Jason.encode!(args)
+        arguments: args
       }
     }
-  end
-
-  defp format_tool(tool) when is_atom(tool) do
-    %{
-      type: "function",
-      function: %{
-        name: tool.name(),
-        description: tool.description(),
-        parameters: format_parameters(tool.parameters())
-      }
-    }
-  end
-
-  defp format_tool(%{name: name, description: desc, parameters: params}) do
-    %{
-      type: "function",
-      function: %{
-        name: name,
-        description: desc,
-        parameters: format_parameters(params)
-      }
-    }
-  end
-
-  defp format_parameters(params) when is_map(params) do
-    properties =
-      Enum.reduce(params, %{}, fn {name, opts}, acc ->
-        prop = %{type: to_string(Keyword.get(opts, :type, :string))}
-
-        prop =
-          if desc = Keyword.get(opts, :description),
-            do: Map.put(prop, :description, desc),
-            else: prop
-
-        Map.put(acc, name, prop)
-      end)
-
-    required =
-      params
-      |> Enum.filter(fn {_, opts} -> Keyword.get(opts, :required, true) end)
-      |> Enum.map(fn {name, _} -> to_string(name) end)
-
-    %{
-      type: "object",
-      properties: properties,
-      required: required
-    }
-  end
-
-  defp maybe_add(map, _key, nil), do: map
-  defp maybe_add(map, key, value), do: Map.put(map, key, value)
-
-  defp maybe_add_tools(map, []), do: map
-
-  defp maybe_add_tools(map, tools) do
-    Map.put(map, :tools, format_tools(tools))
   end
 
   defp parse_tool_calls(nil), do: nil
   defp parse_tool_calls([]), do: nil
 
-  defp parse_tool_calls(tool_calls) do
+  defp parse_tool_calls(tool_calls) when is_list(tool_calls) do
     Enum.map(tool_calls, fn tc ->
-      args =
-        case Jason.decode(tc["function"]["arguments"] || "{}") do
-          {:ok, decoded} -> decoded
-          {:error, _} -> %{}
-        end
+      func = tc["function"] || %{}
+      args = normalize_tool_arguments(func["arguments"] || %{})
 
       ToolCall.new(
-        tc["id"],
-        tc["function"]["name"],
+        tc["id"] || "call_#{:erlang.unique_integer([:positive])}",
+        func["name"],
         args
       )
     end)
   end
 
-  defp parse_finish_reason(nil), do: nil
-  defp parse_finish_reason("stop"), do: :stop
-  defp parse_finish_reason("length"), do: :length
-  defp parse_finish_reason("tool_calls"), do: :tool_calls
-  defp parse_finish_reason(other) when is_binary(other), do: String.to_atom(other)
-  defp parse_finish_reason(_), do: nil
-
-  defp parse_error(status, body) when is_map(body) do
-    message = get_in(body, ["error", "message"]) || body["error"] || "Unknown error"
-    %{status: status, message: message, body: body}
+  defp normalize_tool_arguments(str) when is_binary(str) do
+    case Jason.decode(str) do
+      {:ok, decoded} -> decoded
+      {:error, _} -> %{}
+    end
   end
 
-  defp parse_error(status, body) do
-    %{status: status, message: "Request failed", body: body}
+  defp normalize_tool_arguments(map) when is_map(map), do: map
+
+  defp parse_done_reason(%{"done" => true, "done_reason" => reason}) do
+    Base.parse_finish_reason(reason)
   end
 
-  defp make_request(path, body, _chat) do
-    base_url = Config.base_url(:ollama) || @default_base_url
+  defp parse_done_reason(%{"done" => true}), do: :stop
+  defp parse_done_reason(_), do: nil
+
+  defp calculate_tokens(body) do
+    prompt = body["prompt_eval_count"]
+    eval = body["eval_count"]
+
+    if prompt && eval do
+      prompt + eval
+    else
+      nil
+    end
+  end
+
+  defp make_request(path, body) do
+    base_url = Config.base_url(@provider) || @default_base_url
+    timeout = Base.get_timeout(@provider)
 
     Req.post(
       base_url <> path,
       json: body,
       headers: [{"content-type", "application/json"}],
-      receive_timeout: 300_000
+      receive_timeout: timeout
     )
   end
 
-  defp make_stream_request(path, body, _chat, callback) do
-    base_url = Config.base_url(:ollama) || @default_base_url
+  defp make_stream_request(path, body, callback) do
+    base_url = Config.base_url(@provider) || @default_base_url
+    timeout = Base.get_timeout(@provider)
 
-    accumulated = %{
-      content: "",
-      tool_calls: [],
-      model: nil,
-      input_tokens: nil,
-      output_tokens: nil,
-      finish_reason: nil
-    }
+    # Initialize accumulator in process dictionary
+    Base.init_stream_accumulator()
 
-    into_fun = fn {:data, data}, {req, resp, acc} ->
-      chunks = parse_ndjson_data(data)
-
-      new_acc =
-        Enum.reduce(chunks, acc, fn chunk_data, current_acc ->
-          case parse_chunk(chunk_data) do
-            nil ->
-              current_acc
-
-            chunk ->
-              callback.(chunk)
-              accumulate_chunk(current_acc, chunk)
-          end
-        end)
-
-      {:cont, {req, resp, new_acc}}
-    end
+    into_fun = Base.create_ndjson_stream_fun(callback, &parse_chunk/1)
 
     case Req.post(
            base_url <> path,
            json: body,
            headers: [{"content-type", "application/json"}],
-           receive_timeout: 300_000,
-           into: {:fold, accumulated, into_fun}
+           receive_timeout: timeout,
+           into: into_fun
          ) do
-      {:ok, %{status: 200, body: {_req, _resp, final_acc}}} ->
-        {:ok, build_final_response(final_acc)}
+      {:ok, %{status: 200}} ->
+        final_acc = Base.get_stream_accumulator()
+        {:ok, Base.build_final_response(final_acc)}
 
-      {:ok, %{status: status, body: body}} ->
-        {:error, parse_error(status, body)}
+      {:ok, %{status: status, body: error_body}} ->
+        Base.get_stream_accumulator()
+        {:error, Base.parse_error(status, error_body, @provider)}
 
       {:error, reason} ->
-        {:error, reason}
+        Base.get_stream_accumulator()
+        {:error, ErrorHelpers.from_transport_error(reason, @provider)}
     end
-  end
-
-  defp parse_ndjson_data(data) do
-    data
-    |> String.split("\n")
-    |> Enum.reject(&(&1 == ""))
-    |> Enum.map(fn line ->
-      # Handle both SSE format and plain NDJSON
-      json =
-        if String.starts_with?(line, "data: ") do
-          String.trim_leading(line, "data: ")
-        else
-          line
-        end
-
-      case Jason.decode(json) do
-        {:ok, parsed} -> parsed
-        {:error, _} -> nil
-      end
-    end)
-    |> Enum.reject(&is_nil/1)
-  end
-
-  defp accumulate_chunk(acc, chunk) do
-    %{
-      acc
-      | content: (acc.content || "") <> (chunk.content || ""),
-        tool_calls: merge_tool_calls(acc.tool_calls, chunk.tool_calls),
-        model: chunk.model || acc.model,
-        input_tokens: chunk.input_tokens || acc.input_tokens,
-        output_tokens: chunk.output_tokens || acc.output_tokens,
-        finish_reason: chunk.finish_reason || acc.finish_reason
-    }
-  end
-
-  defp merge_tool_calls(existing, nil), do: existing
-  defp merge_tool_calls(existing, []), do: existing
-  defp merge_tool_calls(existing, new), do: existing ++ new
-
-  defp build_final_response(acc) do
-    Response.new(
-      content: if(acc.content == "", do: nil, else: acc.content),
-      tool_calls: if(acc.tool_calls == [], do: nil, else: acc.tool_calls),
-      model: acc.model,
-      input_tokens: acc.input_tokens,
-      output_tokens: acc.output_tokens,
-      total_tokens:
-        if(acc.input_tokens && acc.output_tokens,
-          do: acc.input_tokens + acc.output_tokens,
-          else: nil
-        ),
-      finish_reason: acc.finish_reason
-    )
   end
 end

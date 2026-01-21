@@ -78,21 +78,23 @@ defmodule ElixirLLM.Retry do
         {:ok, result}
 
       {:error, error} ->
-        if should_retry?(error) and attempt < config.max_attempts do
-          delay = calculate_delay(attempt, config)
-
-          # Call on_retry callback if provided
-          if config.on_retry do
-            config.on_retry.(attempt, error)
-          end
-
-          Process.sleep(delay)
-          do_retry(fun, config, attempt + 1)
-        else
-          {:error, error}
-        end
+        maybe_retry(fun, config, attempt, error)
     end
   end
+
+  defp maybe_retry(fun, config, attempt, error) do
+    if should_retry?(error) and attempt < config.max_attempts do
+      delay = calculate_delay(attempt, config)
+      invoke_on_retry_callback(config.on_retry, attempt, error)
+      Process.sleep(delay)
+      do_retry(fun, config, attempt + 1)
+    else
+      {:error, error}
+    end
+  end
+
+  defp invoke_on_retry_callback(nil, _attempt, _error), do: :ok
+  defp invoke_on_retry_callback(callback, attempt, error), do: callback.(attempt, error)
 
   @doc """
   Returns true if the error should trigger a retry.

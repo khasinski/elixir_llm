@@ -123,4 +123,134 @@ defmodule ElixirLLM.Config do
   def default_provider do
     provider_for_model(default_model())
   end
+
+  # ===========================================================================
+  # Configuration Validation
+  # ===========================================================================
+
+  @doc """
+  Validates that the API key is configured for a provider.
+
+  Returns `{:ok, api_key}` or `{:error, reason}`.
+  """
+  @spec validate_api_key(atom()) :: {:ok, String.t()} | {:error, String.t()}
+  def validate_api_key(provider) do
+    case api_key(provider) do
+      nil ->
+        {:error, "API key not configured for #{provider}. Set #{provider_env_var(provider)} or configure in config.exs"}
+
+      "" ->
+        {:error, "API key for #{provider} is empty"}
+
+      key when is_binary(key) ->
+        {:ok, key}
+    end
+  end
+
+  @doc """
+  Validates API key and raises if not configured.
+  """
+  @spec validate_api_key!(atom()) :: String.t()
+  def validate_api_key!(provider) do
+    case validate_api_key(provider) do
+      {:ok, key} -> key
+      {:error, message} -> raise ArgumentError, message
+    end
+  end
+
+  @doc """
+  Returns the expected environment variable name for a provider's API key.
+  """
+  @spec provider_env_var(atom()) :: String.t()
+  def provider_env_var(:openai), do: "OPENAI_API_KEY"
+  def provider_env_var(:anthropic), do: "ANTHROPIC_API_KEY"
+  def provider_env_var(:gemini), do: "GOOGLE_API_KEY"
+  def provider_env_var(:mistral), do: "MISTRAL_API_KEY"
+  def provider_env_var(:groq), do: "GROQ_API_KEY"
+  def provider_env_var(:together), do: "TOGETHER_API_KEY"
+  def provider_env_var(:openrouter), do: "OPENROUTER_API_KEY"
+  def provider_env_var(provider), do: "#{String.upcase(to_string(provider))}_API_KEY"
+
+  @doc """
+  Validates configuration at startup.
+
+  Returns `:ok` or a list of validation errors.
+  """
+  @spec validate() :: :ok | {:error, [String.t()]}
+  def validate do
+    errors =
+      configured_providers()
+      |> Enum.flat_map(&validate_provider/1)
+
+    if errors == [] do
+      :ok
+    else
+      {:error, errors}
+    end
+  end
+
+  @doc """
+  Validates configuration and raises on error.
+  """
+  @spec validate!() :: :ok
+  def validate! do
+    case validate() do
+      :ok -> :ok
+      {:error, errors} -> raise ArgumentError, "Configuration errors:\n" <> Enum.join(errors, "\n")
+    end
+  end
+
+  defp configured_providers do
+    # Return list of providers that have any configuration
+    [:openai, :anthropic, :gemini, :mistral, :groq, :together, :openrouter, :ollama]
+    |> Enum.filter(fn provider ->
+      config = provider_config(provider)
+      config != [] and Keyword.has_key?(config, :api_key)
+    end)
+  end
+
+  defp validate_provider(provider) do
+    case validate_api_key(provider) do
+      {:ok, _} -> []
+      {:error, msg} -> [msg]
+    end
+  end
+
+  @doc """
+  Checks if a provider requires an API key.
+  """
+  @spec requires_api_key?(atom()) :: boolean()
+  def requires_api_key?(:ollama), do: false
+  def requires_api_key?(_), do: true
+
+  # ===========================================================================
+  # Provider Resolution
+  # ===========================================================================
+
+  @provider_modules %{
+    openai: ElixirLLM.Providers.OpenAI,
+    anthropic: ElixirLLM.Providers.Anthropic,
+    gemini: ElixirLLM.Providers.Gemini,
+    mistral: ElixirLLM.Providers.Mistral,
+    groq: ElixirLLM.Providers.Groq,
+    together: ElixirLLM.Providers.Together,
+    openrouter: ElixirLLM.Providers.OpenRouter,
+    ollama: ElixirLLM.Providers.Ollama
+  }
+
+  @doc """
+  Converts a provider atom or module to the provider module.
+
+  ## Examples
+
+      iex> ElixirLLM.Config.get_provider_module(:openai)
+      ElixirLLM.Providers.OpenAI
+
+      iex> ElixirLLM.Config.get_provider_module(ElixirLLM.Providers.Anthropic)
+      ElixirLLM.Providers.Anthropic
+  """
+  @spec get_provider_module(atom() | module()) :: module()
+  def get_provider_module(provider) when is_atom(provider) do
+    Map.get(@provider_modules, provider) || provider
+  end
 end
