@@ -16,6 +16,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.0] - 2026-01-21
+
+### Added
+
+#### New Provider
+- **OpenRouter** - Access 100+ models via unified API with `openrouter/` prefix
+
+#### Testing Infrastructure
+- **ExVCR integration** - HTTP recording for deterministic tests without API keys
+- **VCR tests** - 10 cassette-based tests for OpenAI, Anthropic, and Gemini
+- **API key filtering** - Automatic removal of sensitive data from cassettes
+
+#### Gemini Models
+- **Gemini 2.5 series** - `gemini-2.5-pro-preview-05-06`, `gemini-2.5-flash-preview-05-20`
+- **Gemini 2.0 nano** - `gemini-2.0-flash-lite` for lowest latency
+
+### Changed
+- **Provider architecture** - Extracted shared logic into `ElixirLLM.Providers.Base`
+- **Streaming implementation** - Refactored for Req 0.5.x compatibility using process dictionary pattern
+- **Code deduplication** - Reduced provider code by ~40% through shared helpers
+
+### Fixed
+- **Streaming bug** - Fixed `{:fold, acc, fun}` format not supported in Req 0.5.x
+- **Dialyzer warnings** - Added `:mix` to PLT for Mix.Task analysis
+
+---
+
 ## [0.2.0] - 2026-01-20
 
 ### Added
@@ -114,7 +141,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/khasinski/elixir_llm/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/khasinski/elixir_llm/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/khasinski/elixir_llm/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/khasinski/elixir_llm/releases/tag/v0.2.0
 [0.1.0]: https://github.com/khasinski/elixir_llm/releases/tag/v0.1.0
 [0.0.1]: https://github.com/khasinski/elixir_llm/releases/tag/v0.0.1
