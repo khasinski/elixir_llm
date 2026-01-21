@@ -1,0 +1,38 @@
+[
+  {
+    "request": {
+      "options": {
+        "receive_timeout": 120000
+      },
+      "body": "{\"contents\":[{\"parts\":[{\"text\":\"What is 2+2? Reply with just the number.\"}],\"role\":\"user\"}],\"generationConfig\":{\"temperature\":0.0}}",
+      "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=[FILTERED]",
+      "headers": {
+        "accept": "application/json",
+        "accept-encoding": "gzip",
+        "content-type": "application/json",
+        "user-agent": "req/0.5.17"
+      },
+      "method": "post",
+      "request_body": ""
+    },
+    "response": {
+      "binary": true,
+      "type": "ok",
+      "body": "g20AAAEfH4sIAAAAAAAC/61Qy07DMBC85yssnxsEablw5CHUA6JAQEXAYcGbxtSxI3vLQ1H+HTtpWgeu+GCtdmZnd6ZJGONvoIUUQOj4CXvyHcaa7g+Y0YSaPDC0fLMGS3tu/5qo9hTCrzDEZ8+aR0i7q18mez1rFAZyZQSqgd4OBF5ILV15i+CMDrS7/HrRs4JcJ8Q3DlZ4hQTeB+yu5bU1VU25WaM+M5vOx9G0F45sj/BsC5MhUOPJ48kfVXfud0oVpxEF5Q2BkvQdrs4vljmPTNP4qMF1EoXz+8R/WpaNdyXbrPv4H9A62ee8wsonn2YHh2mhwJWpV8dOlVt0tdEO5yIQS3v6Ca+2uHzM1h9ivpjO3pfy5p4nbfIDOqWmWGECAAA=",
+      "headers": {
+        "content-type": "application/json; charset=UTF-8",
+        "vary": "Origin",
+        "content-encoding": "gzip",
+        "date": "Wed, 21 Jan 2026 10:55:02 GMT",
+        "server": "scaffolding on HTTPServer2",
+        "x-xss-protection": "0",
+        "x-frame-options": "SAMEORIGIN",
+        "x-content-type-options": "nosniff",
+        "server-timing": "gfet4t7; dur=413",
+        "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+        "transfer-encoding": "chunked"
+      },
+      "status_code": 200
+    }
+  }
+]

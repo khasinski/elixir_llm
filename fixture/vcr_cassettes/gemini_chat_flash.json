@@ -1,0 +1,38 @@
+[
+  {
+    "request": {
+      "options": {
+        "receive_timeout": 120000
+      },
+      "body": "{\"contents\":[{\"parts\":[{\"text\":\"Say 'Hello from Gemini' and nothing else.\"}],\"role\":\"user\"}],\"generationConfig\":null}",
+      "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=[FILTERED]",
+      "headers": {
+        "accept": "application/json",
+        "accept-encoding": "gzip",
+        "content-type": "application/json",
+        "user-agent": "req/0.5.17"
+      },
+      "method": "post",
+      "request_body": ""
+    },
+    "response": {
+      "binary": true,
+      "type": "ok",
+      "body": "g20AAAFGH4sIAAAAAAAC/61Ry07DMBC85yssn0kVWqcIbrwEkQpUEEEl4OAm2ySq4w2xW0BV/7120rQOZ3KIrJ3Zmd3ZjUcITbhMi5RrUPSCvJsKIZvmbzGUGqQ2QFcyxYrX+shtv43zNhQNP7aJ3oMQSBY1luQOykIWH5I6zO3h/Xly1K9RgG0uMQXR0bcdgS6MjMqfgSuUlvYSP03pAeXrbIJZVePcjuifD0ZDNmSMhePRODwLWAh+EHqdeWNLV4pn8ACamxT4YVdqRMpKx7gEeY2rJoXToDVyQuvhbA9r1Fz0OzvIUVU3xrMQbpZOzGZ9Lgr9a3eMb2cxdSLS/aG6jDwnyr8j/pMZ63t5+8u0x3qFWhXtVbLm3P5wEPgLwVXeCNIaVIVSQZRaTj6/+uYwSaLH2dc6jaaYvE2Wlwn1tt4O4/3+7poCAAA=",
+      "headers": {
+        "content-type": "application/json; charset=UTF-8",
+        "vary": "Origin",
+        "content-encoding": "gzip",
+        "date": "Wed, 21 Jan 2026 10:55:01 GMT",
+        "server": "scaffolding on HTTPServer2",
+        "x-xss-protection": "0",
+        "x-frame-options": "SAMEORIGIN",
+        "x-content-type-options": "nosniff",
+        "server-timing": "gfet4t7; dur=318",
+        "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+        "transfer-encoding": "chunked"
+      },
+      "status_code": 200
+    }
+  }
+]

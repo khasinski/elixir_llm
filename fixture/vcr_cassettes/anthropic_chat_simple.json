@@ -1,0 +1,54 @@
+[
+  {
+    "request": {
+      "options": {
+        "receive_timeout": 120000
+      },
+      "body": "{\"messages\":[{\"role\":\"user\",\"content\":\"Say 'Hello from Claude' and nothing else.\"}],\"stream\":false,\"model\":\"claude-3-5-haiku-latest\",\"max_tokens\":4096}",
+      "url": "https://api.anthropic.com/v1/messages",
+      "headers": {
+        "accept": "application/json",
+        "accept-encoding": "gzip",
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+        "user-agent": "req/0.5.17",
+        "x-api-key": "[FILTERED_API_KEY]"
+      },
+      "method": "post",
+      "request_body": ""
+    },
+    "response": {
+      "binary": true,
+      "type": "ok",
+      "body": "g20AAAEMH4sIAAAAAAAA/3WQS0vEMBDHv8oy5xbaug/pTUTYkwf14AMJIRm3YfOoyWRRSr+702LxhaeE/++XmcwM4IJGCy0oK7PG8qzclJ00x1w2VbOuq6aBAoxmwaWDqOorvb++p1u/fnjc3rmYd6dwc7Fjh957nCxMSR6QgxjsFMiUTCLpiSMVPCHf2qdh8QnfJjIfLezR2rB6icGtLuf/wPhcQKLQi4gyBc8Oei0oRw+fIOFrRq+4mM/WFpDn/u0AxveZBIUj+gRtfc79pepQKC5FJnjxU6gWzlj/x5a3U33sO3QYpRUb99f/onX3m44FhEzfoy0Pg/FkFAoyGHnMaWdaRg3j+AEFkJqLpQEAAA==",
+      "headers": {
+        "date": "Wed, 21 Jan 2026 10:55:54 GMT",
+        "content-type": "application/json",
+        "transfer-encoding": "chunked",
+        "connection": "keep-alive",
+        "anthropic-ratelimit-input-tokens-limit": "50000",
+        "anthropic-ratelimit-input-tokens-remaining": "50000",
+        "anthropic-ratelimit-input-tokens-reset": "2026-01-21T10:55:54Z",
+        "anthropic-ratelimit-output-tokens-limit": "10000",
+        "anthropic-ratelimit-output-tokens-remaining": "10000",
+        "anthropic-ratelimit-output-tokens-reset": "2026-01-21T10:55:54Z",
+        "anthropic-ratelimit-requests-limit": "50",
+        "anthropic-ratelimit-requests-remaining": "48",
+        "anthropic-ratelimit-requests-reset": "2026-01-21T10:55:56Z",
+        "anthropic-ratelimit-tokens-limit": "60000",
+        "anthropic-ratelimit-tokens-remaining": "60000",
+        "anthropic-ratelimit-tokens-reset": "2026-01-21T10:55:54Z",
+        "request-id": "req_011CXLQFQqhzxhirbgpDPAHm",
+        "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+        "anthropic-organization-id": "27eeba7e-b1ca-4526-ac12-3141fd224476",
+        "server": "cloudflare",
+        "x-envoy-upstream-service-time": "526",
+        "cf-cache-status": "DYNAMIC",
+        "x-robots-tag": "none",
+        "content-encoding": "gzip",
+        "cf-ray": "9c16482a1e3455b2-WAW"
+      },
+      "status_code": 200
+    }
+  }
+]

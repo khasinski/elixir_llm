@@ -1,0 +1,38 @@
+[
+  {
+    "request": {
+      "options": {
+        "receive_timeout": 120000
+      },
+      "body": "{\"contents\":[{\"parts\":[{\"text\":\"Hello\"}],\"role\":\"user\"}],\"generationConfig\":null,\"systemInstruction\":{\"parts\":[{\"text\":\"You are a helpful assistant that only responds with 'OK'.\"}]}}",
+      "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=[FILTERED]",
+      "headers": {
+        "accept": "application/json",
+        "accept-encoding": "gzip",
+        "content-type": "application/json",
+        "user-agent": "req/0.5.17"
+      },
+      "method": "post",
+      "request_body": ""
+    },
+    "response": {
+      "binary": true,
+      "type": "ok",
+      "body": "g20AAAFCH4sIAAAAAAAC/61Ry07DMBC85ysin5sqD9q03HhUCAFqRcNDAg4L2SYRiR1iB2ij/Dt20qQOXPHBsnbGM7uzlWGa5A1omIQgkJNj80lWTLNqboUxKpAKCXQlWcyhEAdueyrtLSkCv9Unsrx6pkSD6v79MjoIFixFxc5YiGlHrzsC2SQ04fEtAmdU0dbBckV6FD6jaxblBXtVPVnO2HY872g2n7uu701930HLnhqdeWNLSg4R3qAAOTb0wxEpkuUiYO9Iz1jZjO14rZGW0gB397BgAtLhz8nojyo/l55Jqoen5SrHhzQRWzVjsHgMiBaRGDbVZWRoUf5u8Z/M3KGXsd9Mu6x7LHjSbiXCTO7Jcse2tUmBx5ZUx0aVFMhzRjlehooY+6dfAOv8YvYwoXyx+iit3fbkjhi18QPwJ9NLkAIAAA==",
+      "headers": {
+        "content-type": "application/json; charset=UTF-8",
+        "vary": "Origin",
+        "content-encoding": "gzip",
+        "date": "Wed, 21 Jan 2026 10:55:03 GMT",
+        "server": "scaffolding on HTTPServer2",
+        "x-xss-protection": "0",
+        "x-frame-options": "SAMEORIGIN",
+        "x-content-type-options": "nosniff",
+        "server-timing": "gfet4t7; dur=489",
+        "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+        "transfer-encoding": "chunked"
+      },
+      "status_code": 200
+    }
+  }
+]

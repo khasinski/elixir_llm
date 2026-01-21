@@ -1,0 +1,54 @@
+[
+  {
+    "request": {
+      "options": {
+        "receive_timeout": 120000
+      },
+      "body": "{\"messages\":[{\"role\":\"system\",\"content\":\"You are a helpful assistant that only responds with 'OK'.\"},{\"role\":\"user\",\"content\":\"Hello\"}],\"stream\":false,\"model\":\"gpt-4o-mini\"}",
+      "url": "https://api.openai.com/v1/chat/completions",
+      "headers": {
+        "accept": "application/json",
+        "accept-encoding": "gzip",
+        "authorization": "Bearer [FILTERED_API_KEY]",
+        "content-type": "application/json",
+        "user-agent": "req/0.5.17"
+      },
+      "method": "post",
+      "request_body": ""
+    },
+    "response": {
+      "binary": true,
+      "type": "ok",
+      "body": "g20AAAGhH4sIAAAAAAAAAwAAAP//jJJBa9wwEIXv/hVizuuyu/Fm13trCL0EGhJKIZRgtNLYVitrhDROW8L+9yJ7s3bSFHrRQd+80Xujec6EAKNhL0C1klXnbX69vPtYfn7Ssb34dPmg77/8fLi4au7x67YpbmCRFHT4jopfVB8Udd4iG3IjVgElY+q62l7uynJdFqsBdKTRJlnjOS8o74wz+Xq5LvLlNl/tTuqWjMIIe/EtE0KI5+FMPp3GX7AXy8XLTYcxygZhfy4SAgLZdAMyRhNZOobFBBU5RjdYv72Zg4B1H2Uy53prZ0A6RyxTuMHS44kczyYsNT7QIb6RQm2ciW0VUEZy6cHI5GGgx0yIxyFs/8o/+ECd54rpBw7PrYuxHUwjnuDqxJhY2plms3inWaWRpbFxNitQUrWoJ+U0WNlrQzOQzSL/7eW93mNs45r/aT8BpdAz6soH1Ea9zjuVBUz796+y84gHwxAxPBmFFRsM6Rs01rK341ZA/B0Zu6o2rsHggxlXo/aVKja7zWFzKBVkx+wPAAAA//8DAL5XuUQoAwAA",
+      "headers": {
+        "date": "Wed, 21 Jan 2026 10:55:41 GMT",
+        "content-type": "application/json",
+        "transfer-encoding": "chunked",
+        "connection": "keep-alive",
+        "access-control-expose-headers": "X-Request-ID",
+        "openai-organization": "user-h7m2t30jnyqzec1thkvt5rcd",
+        "openai-processing-ms": "116",
+        "openai-project": "proj_yBBvayevSgRR3SVjSmBgm0so",
+        "openai-version": "2020-10-01",
+        "x-envoy-upstream-service-time": "322",
+        "x-ratelimit-limit-requests": "5000",
+        "x-ratelimit-limit-tokens": "4000000",
+        "x-ratelimit-remaining-requests": "4999",
+        "x-ratelimit-remaining-tokens": "3999981",
+        "x-ratelimit-reset-requests": "12ms",
+        "x-ratelimit-reset-tokens": "0s",
+        "x-request-id": "req_d7bf184e25994f7289b9a640b4f40f53",
+        "x-openai-proxy-wasm": "v0.1",
+        "cf-cache-status": "DYNAMIC",
+        "set-cookie": "__cf_bm=N.4R.xKB_s.Lkl9ryxCU6zx23agNgFY.NExzxW1sJXY-1768992941-1.0.1.1-TVrZl98EHkVMfqrJP1aUkyJECDqoBJKGT.9IJqiYRStK37Gyvh25rWnRO6h3dOyUtxqIM5NA4EbQ5bWzJF_hQHE988B9ZZ4cAzWMKO8eL8k; path=/; expires=Wed, 21-Jan-26 11:25:41 GMT; domain=.api.openai.com; HttpOnly; Secure; SameSite=None",
+        "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+        "x-content-type-options": "nosniff",
+        "server": "cloudflare",
+        "cf-ray": "9c1647d7097e027d-WAW",
+        "content-encoding": "gzip",
+        "alt-svc": "h3=\":443\"; ma=86400"
+      },
+      "status_code": 200
+    }
+  }
+]

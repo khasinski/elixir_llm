@@ -1,0 +1,54 @@
+[
+  {
+    "request": {
+      "options": {
+        "receive_timeout": 120000
+      },
+      "body": "{\"messages\":[{\"role\":\"user\",\"content\":\"What is the capital of France? Reply briefly.\"}],\"stream\":false,\"model\":\"claude-3-5-haiku-latest\",\"max_tokens\":50}",
+      "url": "https://api.anthropic.com/v1/messages",
+      "headers": {
+        "accept": "application/json",
+        "accept-encoding": "gzip",
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+        "user-agent": "req/0.5.17",
+        "x-api-key": "[FILTERED_API_KEY]"
+      },
+      "method": "post",
+      "request_body": ""
+    },
+    "response": {
+      "binary": true,
+      "type": "ok",
+      "body": "g20AAAEDH4sIAAAAAAAA/3WQTUvEMBCG/8ucW2lai9CjR8FFPHgRCSEZ2+ymSU0mflD6350uFnWXPSW8z5N3mMwwBoMOOtBOZYNlU7bloOwhl3VVX4uqrqEAa1gYUy8rsROPsWlv9x+Cnu7u+91+iK9NZIe+JlwtTEn1yEEMbg1USjaR8sSRDp6Qb93zvPmEnys5Hh08qGjTFSwvBSQKk4yoUvAM0BtJOXr4AQnfMnrNDT47V0A+Du1msH7KJCkc0CfoxA0PVXpAqbmKbPDyv1BtnLG5xLa3az9OA44YlZPteO7/UjGc0qWAkOlv1PIyGN+tRkkWI6+5fpRR0cCyfAPx9LXomgEAAA==",
+      "headers": {
+        "date": "Wed, 21 Jan 2026 10:55:55 GMT",
+        "content-type": "application/json",
+        "transfer-encoding": "chunked",
+        "connection": "keep-alive",
+        "anthropic-ratelimit-input-tokens-limit": "50000",
+        "anthropic-ratelimit-input-tokens-remaining": "50000",
+        "anthropic-ratelimit-input-tokens-reset": "2026-01-21T10:55:55Z",
+        "anthropic-ratelimit-output-tokens-limit": "10000",
+        "anthropic-ratelimit-output-tokens-remaining": "10000",
+        "anthropic-ratelimit-output-tokens-reset": "2026-01-21T10:55:55Z",
+        "anthropic-ratelimit-requests-limit": "50",
+        "anthropic-ratelimit-requests-remaining": "47",
+        "anthropic-ratelimit-requests-reset": "2026-01-21T10:55:57Z",
+        "anthropic-ratelimit-tokens-limit": "60000",
+        "anthropic-ratelimit-tokens-remaining": "60000",
+        "anthropic-ratelimit-tokens-reset": "2026-01-21T10:55:55Z",
+        "request-id": "req_011CXLQFToZ3cuwvrkru1DJE",
+        "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+        "anthropic-organization-id": "27eeba7e-b1ca-4526-ac12-3141fd224476",
+        "server": "cloudflare",
+        "x-envoy-upstream-service-time": "485",
+        "cf-cache-status": "DYNAMIC",
+        "x-robots-tag": "none",
+        "content-encoding": "gzip",
+        "cf-ray": "9c16482e683c55b2-WAW"
+      },
+      "status_code": 200
+    }
+  }
+]
