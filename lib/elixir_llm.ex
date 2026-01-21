@@ -236,11 +236,12 @@ defmodule ElixirLLM do
     end
 
     # Wrap with resilience features (order matters: cache -> rate_limit -> circuit_breaker -> retry -> request)
-    wrapped_fn = request_fn
-    |> maybe_wrap_retry(chat.retry)
-    |> maybe_wrap_circuit_breaker(chat.circuit_breaker, provider_atom)
-    |> maybe_wrap_rate_limit(chat.rate_limit, provider_atom)
-    |> maybe_wrap_cache(chat.cache, chat)
+    wrapped_fn =
+      request_fn
+      |> maybe_wrap_retry(chat.retry)
+      |> maybe_wrap_circuit_breaker(chat.circuit_breaker, provider_atom)
+      |> maybe_wrap_rate_limit(chat.rate_limit, provider_atom)
+      |> maybe_wrap_cache(chat.cache, chat)
 
     case wrapped_fn.() do
       {:ok, response} ->
@@ -254,16 +255,19 @@ defmodule ElixirLLM do
   # Resilience wrappers
 
   defp maybe_wrap_retry(fun, false), do: fun
+
   defp maybe_wrap_retry(fun, opts) when is_list(opts) do
     fn -> ElixirLLM.Retry.with_retry(fun, opts) end
   end
 
   defp maybe_wrap_circuit_breaker(fun, false, _provider), do: fun
+
   defp maybe_wrap_circuit_breaker(fun, true, provider) do
     fn -> ElixirLLM.CircuitBreaker.call(provider, fun) end
   end
 
   defp maybe_wrap_rate_limit(fun, false, _provider), do: fun
+
   defp maybe_wrap_rate_limit(fun, true, provider) do
     fn ->
       :ok = ElixirLLM.RateLimiter.acquire(provider)
@@ -272,6 +276,7 @@ defmodule ElixirLLM do
   end
 
   defp maybe_wrap_cache(fun, false, _chat), do: fun
+
   defp maybe_wrap_cache(fun, true, chat) do
     fn ->
       cache_key = ElixirLLM.Cache.key(chat)

@@ -39,7 +39,9 @@ defmodule ElixirLLM.Providers.OpenAIVCRTest do
         chat =
           ElixirLLM.new()
           |> ElixirLLM.model("gpt-4o-mini")
-          |> Chat.add_message(Message.system("You are a helpful assistant that only responds with 'OK'."))
+          |> Chat.add_message(
+            Message.system("You are a helpful assistant that only responds with 'OK'.")
+          )
           |> Chat.add_message(Message.user("Hello"))
 
         {:ok, response} = OpenAI.chat(chat)

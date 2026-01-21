@@ -242,7 +242,8 @@ defmodule ElixirLLM.Error.Helpers do
   """
   @spec from_response(map(), atom()) :: Exception.t()
   @spec from_response(integer(), String.t(), keyword()) :: Exception.t()
-  def from_response(%{status: status, message: message} = response, provider) when is_atom(provider) do
+  def from_response(%{status: status, message: message} = response, provider)
+      when is_atom(provider) do
     from_response(status, message, provider: provider, body: Map.get(response, :body))
   end
 

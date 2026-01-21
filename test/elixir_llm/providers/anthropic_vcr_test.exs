@@ -39,7 +39,9 @@ defmodule ElixirLLM.Providers.AnthropicVCRTest do
         chat =
           ElixirLLM.new()
           |> ElixirLLM.model("claude-3-5-haiku-latest")
-          |> Chat.add_message(Message.system("You are a helpful assistant that only responds with 'OK'."))
+          |> Chat.add_message(
+            Message.system("You are a helpful assistant that only responds with 'OK'.")
+          )
           |> Chat.add_message(Message.user("Hello"))
 
         {:ok, response} = Anthropic.chat(chat)

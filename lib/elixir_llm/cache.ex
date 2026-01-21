@@ -224,8 +224,10 @@ defmodule ElixirLLM.Cache do
   end
 
   defp wait_for_table(attempts \\ 0)
+
   defp wait_for_table(attempts) when attempts > 50 do
-    :ok  # Give up after ~500ms
+    # Give up after ~500ms
+    :ok
   end
 
   defp wait_for_table(attempts) do

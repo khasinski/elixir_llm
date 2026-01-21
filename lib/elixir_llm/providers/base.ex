@@ -208,12 +208,14 @@ defmodule ElixirLLM.Providers.Base do
   end
 
   defp decode_tool_arguments(nil), do: %{}
+
   defp decode_tool_arguments(args) when is_binary(args) do
     case Jason.decode(args) do
       {:ok, decoded} -> decoded
       {:error, _} -> %{}
     end
   end
+
   defp decode_tool_arguments(args) when is_map(args), do: args
 
   # ===========================================================================
@@ -532,7 +534,9 @@ defmodule ElixirLLM.Providers.Base do
 
   defp process_fold_chunk(chunk_data, current_acc, callback, parse_chunk_fn) do
     case parse_chunk_fn.(chunk_data) do
-      nil -> current_acc
+      nil ->
+        current_acc
+
       chunk ->
         callback.(chunk)
         accumulate_chunk(current_acc, chunk)

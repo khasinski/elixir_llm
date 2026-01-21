@@ -53,7 +53,9 @@ defmodule ElixirLLM.Providers.GeminiVCRTest do
         chat =
           ElixirLLM.new()
           |> ElixirLLM.model("gemini-2.0-flash-lite")
-          |> Chat.add_message(Message.system("You are a helpful assistant that only responds with 'OK'."))
+          |> Chat.add_message(
+            Message.system("You are a helpful assistant that only responds with 'OK'.")
+          )
           |> Chat.add_message(Message.user("Hello"))
 
         {:ok, response} = Gemini.chat(chat)

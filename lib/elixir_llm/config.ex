@@ -137,7 +137,8 @@ defmodule ElixirLLM.Config do
   def validate_api_key(provider) do
     case api_key(provider) do
       nil ->
-        {:error, "API key not configured for #{provider}. Set #{provider_env_var(provider)} or configure in config.exs"}
+        {:error,
+         "API key not configured for #{provider}. Set #{provider_env_var(provider)} or configure in config.exs"}
 
       "" ->
         {:error, "API key for #{provider} is empty"}
@@ -195,8 +196,11 @@ defmodule ElixirLLM.Config do
   @spec validate!() :: :ok
   def validate! do
     case validate() do
-      :ok -> :ok
-      {:error, errors} -> raise ArgumentError, "Configuration errors:\n" <> Enum.join(errors, "\n")
+      :ok ->
+        :ok
+
+      {:error, errors} ->
+        raise ArgumentError, "Configuration errors:\n" <> Enum.join(errors, "\n")
     end
   end
 
