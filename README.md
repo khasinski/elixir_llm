@@ -59,7 +59,7 @@ Add to your `mix.exs`:
 ```elixir
 def deps do
   [
-    {:elixir_llm, "~> 0.2.0"}
+    {:elixir_llm, "~> 0.3.0"}
   ]
 end
 ```
