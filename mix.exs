@@ -1,7 +1,7 @@
 defmodule ElixirLLM.MixProject do
   use Mix.Project
 
-  @version "0.3.0"
+  @version "0.4.0"
   @source_url "https://github.com/khasinski/elixir_llm"
 
   def project do
@@ -47,6 +47,9 @@ defmodule ElixirLLM.MixProject do
 
       # Option validation
       {:nimble_options, "~> 1.1"},
+
+      # AWS SigV4 signing (for Bedrock)
+      {:aws_signature, "~> 0.3"},
 
       # Development and testing
       {:ex_doc, "~> 0.34", only: :dev, runtime: false},

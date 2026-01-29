@@ -90,7 +90,7 @@ defmodule ElixirLLM.Providers.Anthropic do
     content_blocks = body["content"] || []
     usage = body["usage"] || %{}
 
-    {text_content, tool_calls} = extract_content(content_blocks)
+    {text_content, tool_calls, thinking_content} = extract_content(content_blocks)
 
     Response.new(
       content: text_content,
@@ -99,7 +99,8 @@ defmodule ElixirLLM.Providers.Anthropic do
       input_tokens: usage["input_tokens"],
       output_tokens: usage["output_tokens"],
       total_tokens: (usage["input_tokens"] || 0) + (usage["output_tokens"] || 0),
-      finish_reason: parse_stop_reason(body["stop_reason"])
+      finish_reason: parse_stop_reason(body["stop_reason"]),
+      thinking: thinking_content
     )
   end
 
@@ -147,7 +148,20 @@ defmodule ElixirLLM.Providers.Anthropic do
     |> Base.maybe_add(:temperature, chat.temperature)
     |> Base.maybe_add(:stream, Keyword.get(opts, :stream, false))
     |> maybe_add_tools(chat.tools)
+    |> maybe_add_extended_thinking(chat.extended_thinking)
     |> Map.merge(chat.params)
+  end
+
+  defp maybe_add_extended_thinking(body, false), do: body
+  defp maybe_add_extended_thinking(body, nil), do: body
+
+  defp maybe_add_extended_thinking(body, true) do
+    Map.put(body, :thinking, %{type: "enabled", budget_tokens: 10_000})
+  end
+
+  defp maybe_add_extended_thinking(body, opts) when is_list(opts) do
+    budget = Keyword.get(opts, :budget_tokens, 10_000)
+    Map.put(body, :thinking, %{type: "enabled", budget_tokens: budget})
   end
 
   defp format_messages(messages) do
@@ -222,11 +236,11 @@ defmodule ElixirLLM.Providers.Anthropic do
   end
 
   defp extract_content(content_blocks) do
-    {texts, tool_uses} =
-      Enum.reduce(content_blocks, {[], []}, fn block, {texts, tools} ->
+    {texts, tool_uses, thinking_blocks} =
+      Enum.reduce(content_blocks, {[], [], []}, fn block, {texts, tools, thinking} ->
         case block["type"] do
           "text" ->
-            {texts ++ [block["text"]], tools}
+            {texts ++ [block["text"]], tools, thinking}
 
           "tool_use" ->
             tool_call =
@@ -236,21 +250,29 @@ defmodule ElixirLLM.Providers.Anthropic do
                 block["input"] || %{}
               )
 
-            {texts, tools ++ [tool_call]}
+            {texts, tools ++ [tool_call], thinking}
+
+          "thinking" ->
+            {texts, tools, thinking ++ [block["thinking"]]}
 
           _ ->
-            {texts, tools}
+            {texts, tools, thinking}
         end
       end)
 
     text_content = Enum.join(texts, "")
     tool_calls = if tool_uses == [], do: nil, else: tool_uses
+    thinking_content = if thinking_blocks == [], do: nil, else: Enum.join(thinking_blocks, "\n")
 
-    {if(text_content == "", do: nil, else: text_content), tool_calls}
+    {if(text_content == "", do: nil, else: text_content), tool_calls, thinking_content}
   end
 
   defp parse_delta(%{"type" => "text_delta", "text" => text}) do
     Chunk.new(content: text)
+  end
+
+  defp parse_delta(%{"type" => "thinking_delta", "thinking" => thinking}) do
+    Chunk.new(thinking: thinking)
   end
 
   defp parse_delta(%{"type" => "input_json_delta"}) do

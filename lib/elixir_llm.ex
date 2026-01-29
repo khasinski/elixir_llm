@@ -89,11 +89,85 @@ defmodule ElixirLLM do
   defdelegate on_tool_result(chat, callback), to: Chat
   defdelegate params(chat, params), to: Chat
 
+  # Extended thinking (Claude, DeepSeek R1)
+  defdelegate extended_thinking(chat, opts \\ true), to: Chat
+
+  # MCP server support
+  defdelegate mcp_server(chat, server), to: Chat
+
+  # Parallel tool execution
+  defdelegate parallel_tools(chat, opts \\ true), to: Chat
+  defdelegate tool_timeout(chat, timeout_ms), to: Chat
+
   # Resilience options
   defdelegate with_retry(chat, opts \\ []), to: Chat
   defdelegate with_cache(chat), to: Chat
   defdelegate with_rate_limiting(chat), to: Chat
   defdelegate with_circuit_breaker(chat), to: Chat
+
+  # ===========================================================================
+  # Image Generation
+  # ===========================================================================
+
+  @doc """
+  Generates an image from a text prompt.
+
+  ## Options
+
+    * `:model` - Model to use (default: "gpt-image-1.5")
+    * `:size` - Image size (default: "1024x1024")
+    * `:quality` - Quality level (default: "standard")
+    * `:response_format` - "url" or "b64_json" (default: "url")
+
+  ## Examples
+
+      {:ok, image} = ElixirLLM.generate_image("A sunset over mountains")
+      {:ok, image} = ElixirLLM.generate_image("A futuristic city", model: "gemini-2.0-flash-exp-image-generation")
+  """
+  defdelegate generate_image(prompt, opts \\ []), to: ElixirLLM.Image, as: :generate
+
+  # ===========================================================================
+  # Audio Transcription
+  # ===========================================================================
+
+  @doc """
+  Transcribes audio to text using Whisper.
+
+  ## Options
+
+    * `:model` - Model to use (default: "whisper-1")
+    * `:language` - Language code (e.g., "en", "es")
+    * `:response_format` - "json", "text", "verbose_json", etc.
+
+  ## Examples
+
+      {:ok, transcript} = ElixirLLM.transcribe("recording.mp3")
+      transcript.text  # => "Hello, world..."
+  """
+  defdelegate transcribe(file_path, opts \\ []), to: ElixirLLM.Audio
+
+  @doc """
+  Translates audio to English text.
+
+  ## Examples
+
+      {:ok, transcript} = ElixirLLM.translate_audio("french_meeting.mp3")
+  """
+  defdelegate translate_audio(file_path, opts \\ []), to: ElixirLLM.Audio, as: :translate
+
+  # ===========================================================================
+  # Content Moderation
+  # ===========================================================================
+
+  @doc """
+  Moderates text content for policy violations.
+
+  ## Examples
+
+      {:ok, result} = ElixirLLM.moderate("Some text to check")
+      if result.flagged, do: IO.puts("Content flagged!")
+  """
+  defdelegate moderate(input, opts \\ []), to: ElixirLLM.Moderation
 
   @doc """
   Creates a new chat instance.
@@ -324,11 +398,8 @@ defmodule ElixirLLM do
       assistant_msg = Message.assistant(response.content, tool_calls: response.tool_calls)
       chat = Chat.add_message(chat, assistant_msg)
 
-      # Execute each tool call
-      tool_results =
-        Enum.map(response.tool_calls, fn tool_call ->
-          execute_tool_call(chat, tool_call)
-        end)
+      # Execute tool calls (parallel or sequential based on config)
+      tool_results = execute_tools(chat, response.tool_calls)
 
       # Add tool results to chat
       chat =
@@ -345,6 +416,81 @@ defmodule ElixirLLM do
         error ->
           error
       end
+    end
+  end
+
+  defp execute_tools(chat, tool_calls) do
+    config = get_parallel_config(chat)
+    start_time = System.monotonic_time()
+
+    # Emit batch start telemetry
+    Telemetry.tool_batch_start(length(tool_calls), config.max_concurrency, config.parallel)
+
+    results =
+      if config.parallel do
+        Task.Supervisor.async_stream_nolink(
+          ElixirLLM.TaskSupervisor,
+          tool_calls,
+          fn tc -> execute_tool_call(chat, tc) end,
+          max_concurrency: config.max_concurrency,
+          timeout: config.timeout,
+          on_timeout: :kill_task,
+          ordered: config.ordered
+        )
+        |> Enum.map(fn
+          {:ok, result} -> result
+          {:exit, :timeout} -> {:timeout, {:error, :tool_timeout}}
+          {:exit, reason} -> {:error, {:error, {:tool_crashed, reason}}}
+        end)
+      else
+        Enum.map(tool_calls, &execute_tool_call(chat, &1))
+      end
+
+    # Calculate stats and emit batch stop telemetry
+    duration = System.monotonic_time() - start_time
+
+    {success_count, error_count, timeout_count} =
+      Enum.reduce(results, {0, 0, 0}, fn
+        {:timeout, _}, {s, e, t} -> {s, e, t + 1}
+        {:error, _}, {s, e, t} -> {s, e + 1, t}
+        {_id, {:error, _}}, {s, e, t} -> {s, e + 1, t}
+        _, {s, e, t} -> {s + 1, e, t}
+      end)
+
+    Telemetry.tool_batch_stop(duration, success_count, error_count, timeout_count)
+
+    # Normalize timeout/error results to standard format
+    Enum.zip(tool_calls, results)
+    |> Enum.map(fn
+      {tc, {:timeout, error}} -> {tc.id, error}
+      {tc, {:error, error}} -> {tc.id, error}
+      {_tc, result} -> result
+    end)
+  end
+
+  defp get_parallel_config(chat) do
+    case chat.parallel_tools do
+      false ->
+        %{parallel: false, max_concurrency: 1, timeout: chat.tool_timeout, ordered: true}
+
+      true ->
+        %{
+          parallel: true,
+          max_concurrency: System.schedulers_online(),
+          timeout: chat.tool_timeout,
+          ordered: true
+        }
+
+      n when is_integer(n) and n > 0 ->
+        %{parallel: true, max_concurrency: n, timeout: chat.tool_timeout, ordered: true}
+
+      opts when is_list(opts) ->
+        %{
+          parallel: true,
+          max_concurrency: Keyword.get(opts, :max_concurrency, System.schedulers_online()),
+          timeout: Keyword.get(opts, :timeout, chat.tool_timeout),
+          ordered: Keyword.get(opts, :ordered, true)
+        }
     end
   end
 

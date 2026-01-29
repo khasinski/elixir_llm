@@ -15,6 +15,8 @@ defmodule ElixirLLM.Chat do
       {:ok, response, chat} = ElixirLLM.ask(chat, "Hello!")
   """
 
+  alias ElixirLLM.MCP
+  alias ElixirLLM.MCP.ToolAdapter
   alias ElixirLLM.Message
 
   @type callback :: (any() -> any())
@@ -31,6 +33,13 @@ defmodule ElixirLLM.Chat do
           on_tool_result: callback() | nil,
           on_chunk: callback() | nil,
           params: map(),
+          # Extended thinking (Claude, DeepSeek R1)
+          extended_thinking: boolean() | keyword() | false,
+          # MCP servers
+          mcp_servers: [MCP.t()],
+          # Parallel tool execution
+          parallel_tools: boolean() | non_neg_integer() | keyword(),
+          tool_timeout: non_neg_integer(),
           # Resilience options
           retry: keyword() | false,
           cache: boolean(),
@@ -50,6 +59,13 @@ defmodule ElixirLLM.Chat do
     on_tool_result: nil,
     on_chunk: nil,
     params: %{},
+    # Extended thinking: disabled by default
+    extended_thinking: false,
+    # MCP servers
+    mcp_servers: [],
+    # Parallel tool execution: enabled by default
+    parallel_tools: true,
+    tool_timeout: 30_000,
     # Resilience: disabled by default, users opt-in
     retry: false,
     cache: false,
@@ -182,6 +198,118 @@ defmodule ElixirLLM.Chat do
   @spec schema(t(), module()) :: t()
   def schema(%__MODULE__{} = chat, schema_module) when is_atom(schema_module) do
     %{chat | schema: schema_module}
+  end
+
+  @doc """
+  Attaches an MCP server to the chat.
+
+  The server's tools will be automatically added to the chat's tool list.
+  Multiple MCP servers can be attached to a single chat.
+
+  ## Examples
+
+      {:ok, conn} = ElixirLLM.MCP.connect("npx", ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"])
+
+      {:ok, response, _} =
+        ElixirLLM.new()
+        |> ElixirLLM.model("claude-sonnet-4-20250514")
+        |> ElixirLLM.mcp_server(conn)
+        |> ElixirLLM.ask("List files in /tmp")
+  """
+  @spec mcp_server(t(), MCP.t()) :: t()
+  def mcp_server(%__MODULE__{} = chat, %MCP{} = server) do
+    mcp_tools = ToolAdapter.to_elixir_llm_tools(server)
+    %{chat | mcp_servers: chat.mcp_servers ++ [server], tools: chat.tools ++ mcp_tools}
+  end
+
+  # ===========================================================================
+  # Parallel Tool Execution Options
+  # ===========================================================================
+
+  @doc """
+  Configures parallel tool execution.
+
+  By default, ElixirLLM executes tools in parallel using `Task.Supervisor.async_stream_nolink`.
+  This can significantly speed up tool execution when multiple tools are called at once.
+
+  ## Options
+
+    * `true` - Enable parallel execution with `max_concurrency: System.schedulers_online()` (default)
+    * `false` - Disable parallel execution (sequential, backwards compatible)
+    * integer - Set max concurrent tasks (e.g., `4`)
+    * keyword list - Full configuration:
+      * `:max_concurrency` - Maximum concurrent tasks (default: `System.schedulers_online()`)
+      * `:timeout` - Timeout per tool in ms (default: chat's `tool_timeout`)
+      * `:ordered` - Preserve result order (default: `true`)
+
+  ## Examples
+
+      # Disable parallel execution
+      chat |> ElixirLLM.parallel_tools(false)
+
+      # Limit to 4 concurrent tools
+      chat |> ElixirLLM.parallel_tools(4)
+
+      # Full configuration
+      chat |> ElixirLLM.parallel_tools(max_concurrency: 8, timeout: 60_000, ordered: true)
+  """
+  @spec parallel_tools(t(), boolean() | non_neg_integer() | keyword()) :: t()
+  def parallel_tools(%__MODULE__{} = chat, opts \\ true) do
+    %{chat | parallel_tools: opts}
+  end
+
+  @doc """
+  Sets the timeout for individual tool execution in milliseconds.
+
+  When a tool exceeds this timeout during parallel execution, it will be killed
+  and return `{:error, :tool_timeout}`. Other tools continue execution.
+
+  ## Examples
+
+      # Set 2 minute timeout
+      chat |> ElixirLLM.tool_timeout(120_000)
+  """
+  @spec tool_timeout(t(), non_neg_integer()) :: t()
+  def tool_timeout(%__MODULE__{} = chat, timeout_ms) when is_integer(timeout_ms) and timeout_ms > 0 do
+    %{chat | tool_timeout: timeout_ms}
+  end
+
+  @doc """
+  Enables extended thinking (chain-of-thought) for supported models.
+
+  When enabled, the model will show its reasoning process before the final answer.
+  The thinking content is returned in `response.thinking`.
+
+  ## Supported Models
+
+    * Claude Sonnet 4, Claude Opus 4 (Anthropic)
+    * DeepSeek Reasoner (R1)
+    * Gemini 2.5 Flash (with reasoning enabled)
+
+  ## Options
+
+    * `:budget_tokens` - Maximum tokens for thinking (default: 10000, Anthropic only)
+
+  ## Examples
+
+      # Simple enable
+      chat
+      |> ElixirLLM.extended_thinking()
+      |> ElixirLLM.ask("Solve this math problem: ...")
+
+      # With budget
+      chat
+      |> ElixirLLM.extended_thinking(budget_tokens: 20000)
+      |> ElixirLLM.ask("Complex reasoning task...")
+
+      # Access thinking in response
+      {:ok, response, _} = ElixirLLM.ask(chat, "...")
+      IO.puts("Thinking: " <> response.thinking)
+      IO.puts("Answer: " <> response.content)
+  """
+  @spec extended_thinking(t(), boolean() | keyword()) :: t()
+  def extended_thinking(%__MODULE__{} = chat, opts \\ true) do
+    %{chat | extended_thinking: opts}
   end
 
   # ===========================================================================

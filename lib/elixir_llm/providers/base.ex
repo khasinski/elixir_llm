@@ -33,7 +33,8 @@ defmodule ElixirLLM.Providers.Base do
       model: nil,
       input_tokens: nil,
       output_tokens: nil,
-      finish_reason: nil
+      finish_reason: nil,
+      thinking: ""
     }
   end
 
@@ -49,7 +50,8 @@ defmodule ElixirLLM.Providers.Base do
         model: chunk.model || acc.model,
         input_tokens: chunk.input_tokens || acc.input_tokens,
         output_tokens: chunk.output_tokens || acc.output_tokens,
-        finish_reason: chunk.finish_reason || acc.finish_reason
+        finish_reason: chunk.finish_reason || acc.finish_reason,
+        thinking: (acc.thinking || "") <> (chunk.thinking || "")
     }
   end
 
@@ -73,7 +75,8 @@ defmodule ElixirLLM.Providers.Base do
       input_tokens: acc.input_tokens,
       output_tokens: acc.output_tokens,
       total_tokens: calculate_total_tokens(acc.input_tokens, acc.output_tokens),
-      finish_reason: acc.finish_reason
+      finish_reason: acc.finish_reason,
+      thinking: if(acc[:thinking] in ["", nil], do: nil, else: acc.thinking)
     )
   end
 

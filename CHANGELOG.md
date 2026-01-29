@@ -9,10 +9,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Planned
 - AWS Bedrock provider
-- Parallel tool execution
 - Audio input/output support
 - Token counting utilities
 - Cost estimation
+
+---
+
+## [0.4.0] - 2026-01-29
+
+### Added
+
+#### Parallel Tool Execution
+- **Parallel tools** - Tools now execute in parallel by default using `Task.Supervisor.async_stream_nolink`
+- **`parallel_tools/2`** - Configure parallel execution: `true` (default), `false`, integer, or keyword list
+- **`tool_timeout/2`** - Set timeout per tool (default: 30s)
+- **Task.Supervisor** - Added `ElixirLLM.TaskSupervisor` for isolated tool execution
+- **Telemetry events** - New `[:elixir_llm, :tool_batch, :start]` and `[:elixir_llm, :tool_batch, :stop]` events
+
+#### Configuration Options
+- `true` - Parallel with `max_concurrency: System.schedulers_online()`
+- `false` - Sequential execution (backwards compatible)
+- integer - Limit max concurrent tasks (e.g., `4`)
+- keyword - Full config: `[max_concurrency: 8, timeout: 60_000, ordered: true]`
+
+#### Error Handling
+- **Timeout handling** - Timed out tools return `{:error, :tool_timeout}`, others continue
+- **Crash isolation** - Crashed tools return `{:error, {:tool_crashed, reason}}`, others continue
+- **Partial failures** - LLM receives error messages and can decide to retry
+
+### Changed
+- **Default behavior** - Tools now execute in parallel by default (results still in order)
+- **Tool loop** - Refactored `execute_tool_loop/4` to use `execute_tools/2` helper
 
 ---
 
@@ -141,7 +168,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/khasinski/elixir_llm/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/khasinski/elixir_llm/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/khasinski/elixir_llm/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/khasinski/elixir_llm/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/khasinski/elixir_llm/releases/tag/v0.2.0
 [0.1.0]: https://github.com/khasinski/elixir_llm/releases/tag/v0.1.0

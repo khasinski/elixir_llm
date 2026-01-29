@@ -12,7 +12,8 @@ defmodule ElixirLLM.Response do
           input_tokens: non_neg_integer() | nil,
           output_tokens: non_neg_integer() | nil,
           total_tokens: non_neg_integer() | nil,
-          finish_reason: atom() | nil
+          finish_reason: atom() | nil,
+          thinking: String.t() | nil
         }
 
   defstruct [
@@ -22,7 +23,8 @@ defmodule ElixirLLM.Response do
     :input_tokens,
     :output_tokens,
     :total_tokens,
-    :finish_reason
+    :finish_reason,
+    :thinking
   ]
 
   @doc """

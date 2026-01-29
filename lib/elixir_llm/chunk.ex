@@ -12,7 +12,8 @@ defmodule ElixirLLM.Chunk do
           model: String.t() | nil,
           input_tokens: non_neg_integer() | nil,
           output_tokens: non_neg_integer() | nil,
-          finish_reason: atom() | nil
+          finish_reason: atom() | nil,
+          thinking: String.t() | nil
         }
 
   defstruct [
@@ -21,7 +22,8 @@ defmodule ElixirLLM.Chunk do
     :model,
     :input_tokens,
     :output_tokens,
-    :finish_reason
+    :finish_reason,
+    :thinking
   ]
 
   @doc """

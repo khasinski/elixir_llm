@@ -42,6 +42,9 @@ defmodule ElixirLLM.Config do
     {"groq/", ElixirLLM.Providers.Groq},
     {"together/", ElixirLLM.Providers.Together},
     {"mistral-api/", ElixirLLM.Providers.Mistral},
+    {"xai/", ElixirLLM.Providers.XAI},
+    {"deepseek/", ElixirLLM.Providers.DeepSeek},
+    {"bedrock/", ElixirLLM.Providers.Bedrock},
     # OpenAI models
     {"gpt-", ElixirLLM.Providers.OpenAI},
     {"o1", ElixirLLM.Providers.OpenAI},
@@ -52,6 +55,10 @@ defmodule ElixirLLM.Config do
     {"claude-", ElixirLLM.Providers.Anthropic},
     # Gemini models (direct API)
     {"gemini-", ElixirLLM.Providers.Gemini},
+    # xAI/Grok models (direct)
+    {"grok-", ElixirLLM.Providers.XAI},
+    # DeepSeek models (direct)
+    {"deepseek-", ElixirLLM.Providers.DeepSeek},
     # Mistral models (direct API, without prefix)
     {"mistral-large", ElixirLLM.Providers.Mistral},
     {"mistral-medium", ElixirLLM.Providers.Mistral},
@@ -64,8 +71,7 @@ defmodule ElixirLLM.Config do
     {"codellama", ElixirLLM.Providers.Ollama},
     {"phi", ElixirLLM.Providers.Ollama},
     {"gemma", ElixirLLM.Providers.Ollama},
-    {"qwen", ElixirLLM.Providers.Ollama},
-    {"deepseek", ElixirLLM.Providers.Ollama}
+    {"qwen", ElixirLLM.Providers.Ollama}
   ]
 
   @doc """
@@ -170,6 +176,9 @@ defmodule ElixirLLM.Config do
   def provider_env_var(:groq), do: "GROQ_API_KEY"
   def provider_env_var(:together), do: "TOGETHER_API_KEY"
   def provider_env_var(:openrouter), do: "OPENROUTER_API_KEY"
+  def provider_env_var(:xai), do: "XAI_API_KEY"
+  def provider_env_var(:deepseek), do: "DEEPSEEK_API_KEY"
+  def provider_env_var(:bedrock), do: "AWS_ACCESS_KEY_ID"
   def provider_env_var(provider), do: "#{String.upcase(to_string(provider))}_API_KEY"
 
   @doc """
@@ -206,7 +215,7 @@ defmodule ElixirLLM.Config do
 
   defp configured_providers do
     # Return list of providers that have any configuration
-    [:openai, :anthropic, :gemini, :mistral, :groq, :together, :openrouter, :ollama]
+    [:openai, :anthropic, :gemini, :mistral, :groq, :together, :openrouter, :ollama, :xai, :deepseek, :bedrock]
     |> Enum.filter(fn provider ->
       config = provider_config(provider)
       config != [] and Keyword.has_key?(config, :api_key)
@@ -239,7 +248,10 @@ defmodule ElixirLLM.Config do
     groq: ElixirLLM.Providers.Groq,
     together: ElixirLLM.Providers.Together,
     openrouter: ElixirLLM.Providers.OpenRouter,
-    ollama: ElixirLLM.Providers.Ollama
+    ollama: ElixirLLM.Providers.Ollama,
+    xai: ElixirLLM.Providers.XAI,
+    deepseek: ElixirLLM.Providers.DeepSeek,
+    bedrock: ElixirLLM.Providers.Bedrock
   }
 
   @doc """
